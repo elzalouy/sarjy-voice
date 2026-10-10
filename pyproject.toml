@@ -1,0 +1,45 @@
+[project]
+name = "sarjy-agent"
+version = "0.1.0"
+description = "Sarjy voice agent"
+readme = "README.md"
+requires-python = ">=3.13.16,<3.14"
+dependencies = [
+    "livekit-agents[deepgram]>=1.8.5",
+    "livekit-plugins-elevenlabs==1.8.5",
+    "pydantic-settings>=2.15.0",
+]
+
+[project.scripts]
+sarjy-agent = "sarjy_agent.main:main"
+
+[build-system]
+requires = ["uv_build>=0.12.24,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "mypy>=2.4.0",
+    "pytest>=9.1.1",
+    "ruff>=0.16.10",
+]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 88
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+files = ["src"]
+
+[[tool.mypy.overrides]]
+module = ["livekit", "livekit.*"]
+ignore_missing_imports = true

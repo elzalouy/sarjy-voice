@@ -1,0 +1,41 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "sarjy-agent: dev",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "sarjy_agent.main",
+      "args": ["dev"],
+      "cwd": "${workspaceFolder}",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/src",
+        "PYDEVD_USE_SYS_MONITORING": "0"
+      },
+      "envFile": "${workspaceFolder}/.env",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "subProcess": false,
+      "showReturnValue": true
+    },
+    {
+      "name": "sarjy-agent: start",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "sarjy_agent.main",
+      "args": ["start"],
+      "cwd": "${workspaceFolder}",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/src",
+        "PYDEVD_USE_SYS_MONITORING": "0"
+      },
+      "envFile": "${workspaceFolder}/.env",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "subProcess": false,
+      "showReturnValue": true
+    }
+  ]
+}

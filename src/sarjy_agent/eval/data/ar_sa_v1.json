@@ -1,0 +1,384 @@
+{
+  "schema_version": 1,
+  "id": "ar-sa",
+  "version": "1.0.0",
+  "locale": "ar-SA",
+  "audio_policy": "text_only_no_user_audio",
+  "comparison_rule": "same_items_for_every_provider",
+  "description": "Authored Saudi Arabic examples for speech-to-text and text-to-speech comparisons. This set is text only and does not contain user audio.",
+  "items": [
+    {
+      "id": "ar-sa-001",
+      "category": "greeting",
+      "number_kind": null,
+      "ambiguity_kind": null,
+      "expected_transcript": "السلام عليكم",
+      "tts_text": "السلام عليكم",
+      "acceptable_transcripts": [],
+      "notes": "A formal greeting. Keep the full phrase."
+    },
+    {
+      "id": "ar-sa-002",
+      "category": "greeting",
+      "number_kind": null,
+      "ambiguity_kind": null,
+      "expected_transcript": "هلا والله، كيفك؟",
+      "tts_text": "هلا والله، كيفك؟",
+      "acceptable_transcripts": [],
+      "notes": "An informal Saudi greeting followed by كيفك (how are you)."
+    },
+    {
+      "id": "ar-sa-003",
+      "category": "greeting",
+      "number_kind": null,
+      "ambiguity_kind": null,
+      "expected_transcript": "صباح الخير، وش أخبارك؟",
+      "tts_text": "صباح الخير، وش أخبارك؟",
+      "acceptable_transcripts": ["صباح الخير، وش اخبارك؟"],
+      "notes": "A morning greeting. وش means what."
+    },
+    {
+      "id": "ar-sa-004",
+      "category": "greeting",
+      "number_kind": null,
+      "ambiguity_kind": null,
+      "expected_transcript": "يعطيك العافية",
+      "tts_text": "يعطيك العافية",
+      "acceptable_transcripts": [],
+      "notes": "Thanks for someone's effort."
+    },
+    {
+      "id": "ar-sa-005",
+      "category": "greeting",
+      "number_kind": null,
+      "ambiguity_kind": null,
+      "expected_transcript": "تصبح على خير",
+      "tts_text": "تصبح على خير",
+      "acceptable_transcripts": [],
+      "notes": "A farewell used at night."
+    },
+    {
+      "id": "ar-sa-006",
+      "category": "question_instruction",
+      "number_kind": null,
+      "ambiguity_kind": null,
+      "expected_transcript": "وين أقرب محطة شحن من موقعي؟",
+      "tts_text": "وين أقرب محطة شحن من موقعي؟",
+      "acceptable_transcripts": [],
+      "notes": "A where-question. وين means where."
+    },
+    {
+      "id": "ar-sa-007",
+      "category": "question_instruction",
+      "number_kind": null,
+      "ambiguity_kind": null,
+      "expected_transcript": "أبي أشحن السيارة الحين، كم ياخذ الوقت؟",
+      "tts_text": "أبي أشحن السيارة الحين، كم ياخذ الوقت؟",
+      "acceptable_transcripts": [],
+      "notes": "A request to charge now, plus a duration question. أبي means I want. الحين means now."
+    },
+    {
+      "id": "ar-sa-008",
+      "category": "question_instruction",
+      "number_kind": null,
+      "ambiguity_kind": null,
+      "expected_transcript": "افتح لي المحطات القريبة، ووريني الأسعار",
+      "tts_text": "افتح لي المحطات القريبة، ووريني الأسعار",
+      "acceptable_transcripts": [],
+      "notes": "Two instructions: open nearby stations and show prices."
+    },
+    {
+      "id": "ar-sa-009",
+      "category": "question_instruction",
+      "number_kind": null,
+      "ambiguity_kind": null,
+      "expected_transcript": "وش حالة طلبي الأخير؟",
+      "tts_text": "وش حالة طلبي الأخير؟",
+      "acceptable_transcripts": [],
+      "notes": "A question about the latest order."
+    },
+    {
+      "id": "ar-sa-010",
+      "category": "question_instruction",
+      "number_kind": null,
+      "ambiguity_kind": null,
+      "expected_transcript": "أبغى ألغي الموعد حق بكرة",
+      "tts_text": "أبغى ألغي الموعد حق بكرة",
+      "acceptable_transcripts": ["أبغى ألغي الموعد حق بكره"],
+      "notes": "A request to cancel tomorrow's appointment. حق marks possession. بكرة means tomorrow."
+    },
+    {
+      "id": "ar-sa-011",
+      "category": "name_place",
+      "number_kind": null,
+      "ambiguity_kind": null,
+      "expected_transcript": "أنا محمد، وأبي محطة في حي النرجس بالرياض",
+      "tts_text": "أنا محمد، وأبي محطة في حي النرجس بالرياض",
+      "acceptable_transcripts": [],
+      "notes": "Speaker name محمد and the Al-Narjis neighborhood in Riyadh."
+    },
+    {
+      "id": "ar-sa-012",
+      "category": "name_place",
+      "number_kind": null,
+      "ambiguity_kind": null,
+      "expected_transcript": "اسمي نورة عبدالله، وأسكن في جدة حي الشاطئ",
+      "tts_text": "اسمي نورة عبدالله، وأسكن في جدة حي الشاطئ",
+      "acceptable_transcripts": ["اسمي نوره عبدالله، وأسكن في جدة حي الشاطئ"],
+      "notes": "Two-part name نورة عبدالله and the Al-Shati neighborhood in Jeddah."
+    },
+    {
+      "id": "ar-sa-013",
+      "category": "name_place",
+      "number_kind": null,
+      "ambiguity_kind": null,
+      "expected_transcript": "وديني أقرب محطة على طريق الملك فهد",
+      "tts_text": "وديني أقرب محطة على طريق الملك فهد",
+      "acceptable_transcripts": [],
+      "notes": "A request for King Fahd Road. وديني means take me there."
+    },
+    {
+      "id": "ar-sa-014",
+      "category": "name_place",
+      "number_kind": null,
+      "ambiguity_kind": null,
+      "expected_transcript": "الموعد عند غادة في الدمام، حي الفيصلية",
+      "tts_text": "الموعد عند غادة في الدمام، حي الفيصلية",
+      "acceptable_transcripts": [],
+      "notes": "Name غادة, city Dammam, and the Al-Faisaliyah neighborhood. The letter غ is easy to miss."
+    },
+    {
+      "id": "ar-sa-015",
+      "category": "name_place",
+      "number_kind": null,
+      "ambiguity_kind": null,
+      "expected_transcript": "فيه محطة قريبة من الحرم في مكة؟",
+      "tts_text": "فيه محطة قريبة من الحرم في مكة؟",
+      "acceptable_transcripts": [],
+      "notes": "A question about a station near the Haram in Mecca."
+    },
+    {
+      "id": "ar-sa-016",
+      "category": "number",
+      "number_kind": "phone",
+      "ambiguity_kind": null,
+      "expected_transcript": "رقمي صفر خمسة خمسة صفر صفر صفر صفر صفر صفر واحد",
+      "tts_text": "رقمي 0550000001",
+      "acceptable_transcripts": ["رقمي 0550000001"],
+      "notes": "Same utterance in two writings. The transcript spells the digits. TTS text uses digits and is also an accepted transcript. This phone number is fictional."
+    },
+    {
+      "id": "ar-sa-017",
+      "category": "number",
+      "number_kind": "phone",
+      "ambiguity_kind": null,
+      "expected_transcript": "كلمني على زائد تسعة ستة ستة خمسة صفر صفر صفر صفر صفر صفر صفر اثنين",
+      "tts_text": "كلمني على +966500000002",
+      "acceptable_transcripts": ["كلمني على +966500000002"],
+      "notes": "Same utterance in two writings. The transcript spells the country code and the digits. TTS text uses digits and is also an accepted transcript. This phone number is fictional."
+    },
+    {
+      "id": "ar-sa-018",
+      "category": "number",
+      "number_kind": "price",
+      "ambiguity_kind": null,
+      "expected_transcript": "الشحن بـ خمسة عشر ريال ونص",
+      "tts_text": "الشحن بـ 15.50 ريال",
+      "acceptable_transcripts": ["الشحن بـ 15.50 ريال", "الشحن بـ 15.5 ريال"],
+      "notes": "Same utterance in two writings. ونص means half a riyal. TTS text uses digits and is also an accepted transcript."
+    },
+    {
+      "id": "ar-sa-019",
+      "category": "number",
+      "number_kind": "price",
+      "ambiguity_kind": null,
+      "expected_transcript": "الباقة بـ تسعة وأربعين ريال وتسعين هللة",
+      "tts_text": "الباقة بـ 49.90 ريال",
+      "acceptable_transcripts": ["الباقة بـ 49.90 ريال"],
+      "notes": "Same utterance in two writings. تسعين هللة means 90 halalas. TTS text uses digits and is also an accepted transcript."
+    },
+    {
+      "id": "ar-sa-020",
+      "category": "number",
+      "number_kind": "date",
+      "ambiguity_kind": null,
+      "expected_transcript": "الموعد يوم الجمعة تسعة أكتوبر ألفين وستة وعشرين",
+      "tts_text": "الموعد يوم الجمعة 9 أكتوبر 2026",
+      "acceptable_transcripts": [
+        "الموعد يوم الجمعة 9 أكتوبر 2026",
+        "الموعد يوم الجمعة ٩ أكتوبر ٢٠٢٦"
+      ],
+      "notes": "Same utterance in two writings. The day is Friday 9 October 2026. TTS text uses digits and is also an accepted transcript."
+    },
+    {
+      "id": "ar-sa-021",
+      "category": "number",
+      "number_kind": "date",
+      "ambiguity_kind": null,
+      "expected_transcript": "الإجازة تبدأ خمسة عشر رمضان",
+      "tts_text": "الإجازة تبدأ 15 رمضان",
+      "acceptable_transcripts": ["الإجازة تبدأ 15 رمضان"],
+      "notes": "Same utterance in two writings. This is a Hijri day in Ramadan. TTS text uses digits and is also an accepted transcript."
+    },
+    {
+      "id": "ar-sa-022",
+      "category": "number",
+      "number_kind": "time",
+      "ambiguity_kind": null,
+      "expected_transcript": "تعال الساعة ثلاثة ونص العصر",
+      "tts_text": "تعال الساعة 3:30 العصر",
+      "acceptable_transcripts": ["تعال الساعة 3:30 العصر"],
+      "notes": "Same utterance in two writings. ونص means half past the hour. TTS text uses digits and is also an accepted transcript."
+    },
+    {
+      "id": "ar-sa-023",
+      "category": "number",
+      "number_kind": "time",
+      "ambiguity_kind": null,
+      "expected_transcript": "الاجتماع الساعة ثمانية الصبح",
+      "tts_text": "الاجتماع الساعة 8:00 الصبح",
+      "acceptable_transcripts": ["الاجتماع الساعة 8:00 الصبح"],
+      "notes": "Same utterance in two writings. This is 8:00 in the morning. TTS text uses digits and is also an accepted transcript."
+    },
+    {
+      "id": "ar-sa-024",
+      "category": "mixed_language",
+      "number_kind": null,
+      "ambiguity_kind": null,
+      "expected_transcript": "أبي أطلب iPhone من التطبيق",
+      "tts_text": "أبي أطلب iPhone من التطبيق",
+      "acceptable_transcripts": [],
+      "notes": "Arabic mixed with the English product name iPhone."
+    },
+    {
+      "id": "ar-sa-025",
+      "category": "mixed_language",
+      "number_kind": null,
+      "ambiguity_kind": null,
+      "expected_transcript": "الشاحن يدعم Fast Charge ولا لا؟",
+      "tts_text": "الشاحن يدعم Fast Charge ولا لا؟",
+      "acceptable_transcripts": [],
+      "notes": "Arabic mixed with the English technical term Fast Charge."
+    },
+    {
+      "id": "ar-sa-026",
+      "category": "mixed_language",
+      "number_kind": null,
+      "ambiguity_kind": null,
+      "expected_transcript": "الـ GPS ما يشتغل، أعد تشغيل الـ Bluetooth",
+      "tts_text": "الـ GPS ما يشتغل، أعد تشغيل الـ Bluetooth",
+      "acceptable_transcripts": ["ال GPS ما يشتغل، أعد تشغيل ال Bluetooth"],
+      "notes": "Arabic mixed with the English words GPS and Bluetooth."
+    },
+    {
+      "id": "ar-sa-027",
+      "category": "mixed_language",
+      "number_kind": null,
+      "ambiguity_kind": null,
+      "expected_transcript": "خلصت الـ battery، أحتاج Power Bank",
+      "tts_text": "خلصت الـ battery، أحتاج Power Bank",
+      "acceptable_transcripts": ["خلصت ال battery، أحتاج Power Bank"],
+      "notes": "Arabic mixed with the English words battery and Power Bank."
+    },
+    {
+      "id": "ar-sa-028",
+      "category": "mixed_language",
+      "number_kind": null,
+      "ambiguity_kind": null,
+      "expected_transcript": "احجز لي موعد في الـ Calendar يوم الأحد",
+      "tts_text": "احجز لي موعد في الـ Calendar يوم الأحد",
+      "acceptable_transcripts": ["احجز لي موعد في ال Calendar يوم الأحد"],
+      "notes": "Arabic mixed with the English word Calendar."
+    },
+    {
+      "id": "ar-sa-029",
+      "category": "ambiguous",
+      "number_kind": null,
+      "ambiguity_kind": "meaning",
+      "expected_transcript": "تمام",
+      "tts_text": "تمام",
+      "acceptable_transcripts": [],
+      "notes": "This can mean yes, okay, or that something is finished. It is not a full request."
+    },
+    {
+      "id": "ar-sa-030",
+      "category": "ambiguous",
+      "number_kind": null,
+      "ambiguity_kind": "meaning",
+      "expected_transcript": "على خير",
+      "tts_text": "على خير",
+      "acceptable_transcripts": [],
+      "notes": "This can be a farewell or a short status. Context decides which one."
+    },
+    {
+      "id": "ar-sa-031",
+      "category": "ambiguous",
+      "number_kind": null,
+      "ambiguity_kind": "meaning",
+      "expected_transcript": "قابلني عند الملك فهد",
+      "tts_text": "قابلني عند الملك فهد",
+      "acceptable_transcripts": [],
+      "notes": "This can be a road, a hospital, or a person. Do not choose one without more context."
+    },
+    {
+      "id": "ar-sa-032",
+      "category": "ambiguous",
+      "number_kind": null,
+      "ambiguity_kind": "meaning",
+      "expected_transcript": "الساعة وحدة",
+      "tts_text": "الساعة وحدة",
+      "acceptable_transcripts": ["الساعة واحدة"],
+      "notes": "This means 1:00, but it does not say morning or evening. وحدة is the dialect form of واحدة."
+    },
+    {
+      "id": "ar-sa-033",
+      "category": "ambiguous",
+      "number_kind": null,
+      "ambiguity_kind": "meaning",
+      "expected_transcript": "يعني أبغى الشحن بس مو متأكد",
+      "tts_text": "يعني أبغى الشحن بس مو متأكد",
+      "acceptable_transcripts": [],
+      "notes": "The words are clear, but the user has not decided. Do not treat this as a confirmed booking."
+    },
+    {
+      "id": "ar-sa-034",
+      "category": "ambiguous",
+      "number_kind": null,
+      "ambiguity_kind": "unclear",
+      "expected_transcript": "آآ وين ال",
+      "tts_text": "آآ وين ال",
+      "acceptable_transcripts": ["وين ال", "اا وين ال"],
+      "notes": "The utterance is cut off. Do not invent the missing word."
+    },
+    {
+      "id": "ar-sa-035",
+      "category": "ambiguous",
+      "number_kind": null,
+      "ambiguity_kind": "unclear",
+      "expected_transcript": "همم",
+      "tts_text": "همم",
+      "acceptable_transcripts": [],
+      "notes": "This is only a filler. It is not a request."
+    },
+    {
+      "id": "ar-sa-036",
+      "category": "ambiguous",
+      "number_kind": null,
+      "ambiguity_kind": "unclear",
+      "expected_transcript": "شحن",
+      "tts_text": "شحن",
+      "acceptable_transcripts": [],
+      "notes": "One word only. It can be a noun or a verb. Do not expand it into a full request."
+    },
+    {
+      "id": "ar-sa-037",
+      "category": "ambiguous",
+      "number_kind": null,
+      "ambiguity_kind": "unclear",
+      "expected_transcript": "خمسطعش دقيقة",
+      "tts_text": "خمسطعش دقيقة",
+      "acceptable_transcripts": ["خمسة عشر دقيقة"],
+      "notes": "Fast speech for fifteen minutes. The careful writing is also correct."
+    }
+  ]
+}

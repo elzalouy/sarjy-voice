@@ -1,0 +1,693 @@
+# Sarjy Voice Agent — Micro-Phase Implementation Plan
+
+## Global Execution Rules
+
+1. Execute one phase only.
+2. Inspect existing files before editing.
+3. Pin dependencies in the lockfile.
+4. Use direct provider plugins and credentials where specified.
+5. Never expose provider keys to the browser.
+6. Keep conversations, users, and persistent memory in the Next.js backend.
+7. Record measurements instead of assuming a provider or optimization is faster.
+8. After each phase, report changed files, commands, tests, and acceptance status.
+9. Stop and wait for explicit user confirmation before continuing.
+
+---
+
+# A. Python Foundation
+
+## P00 — Inspect Repository State
+
+**Deliverable:** Repository assessment.
+
+- Inspect files, Git status, installed Python, and available package tooling.
+- Make no changes.
+
+**Acceptance criteria**
+- Current state and available tooling are documented.
+
+## P01 — Pin Python Runtime
+
+**Deliverable:** Reproducible Python runtime decision.
+
+- Select a Python version supported by the current stable LiveKit Agents and selected plugins.
+- Use `uv` as the proposed package/dependency manager.
+- Record the selected versions.
+
+**Acceptance criteria**
+- A clean environment can use the documented runtime.
+
+## P02 — Initialize Python Project
+
+**Deliverable:** Minimal runnable Python package.
+
+Proposed structure:
+
+src/
+  sarjy_agent/
+    __init__.py
+    main.py
+    config.py
+tests/
+pyproject.toml
+uv.lock
+.env.example
+.gitignore
+README.md
+
+- Create the package structure.
+- Install only the initial required dependencies.
+- Keep the first entry point minimal.
+
+**Acceptance criteria**
+- The project installs and runs a basic command.
+
+## P03 — Configure Code Quality
+
+**Deliverable:** Repeatable checks.
+
+- Add linting and formatting.
+- Add unit test framework.
+- Add static type checks where practical.
+- Configure commands in project documentation.
+
+**Acceptance criteria**
+- Quality checks pass on the baseline project.
+
+## P04 — Add Environment Configuration
+
+**Deliverable:** Validated runtime settings.
+
+Include:
+- `LIVEKIT_URL`
+- `LIVEKIT_API_KEY`
+- `LIVEKIT_API_SECRET`
+- `DEEPGRAM_API_KEY`
+- `ELEVEN_API_KEY`
+- `OPENAI_API_KEY`
+- `NEXTJS_API_BASE_URL`
+- `AGENT_SERVICE_TOKEN`
+- Selected STT model/locale and TTS model/voice.
+
+**Acceptance criteria**
+- Missing required settings produce a clear startup error.
+- Secret values never appear in logs.
+
+## P05 — Add Structured Logging
+
+**Deliverable:** Session-aware logs.
+
+- Log agent lifecycle, provider failures, and safe timing information.
+- Attach room/session/turn correlation IDs.
+- Avoid logging complete sensitive conversations or raw audio by default.
+
+**Acceptance criteria**
+- A session can be debugged from logs without revealing credentials.
+
+## P06 — Create Arabic Evaluation Corpus
+
+**Deliverable:** Fixed test set before provider tuning.
+
+Include representative Saudi Arabic examples:
+- Greetings and common expressions.
+- Questions and instructions.
+- Names and places.
+- Phone numbers, prices, dates, and times.
+- Arabic mixed with English product/technical words.
+- Ambiguous phrases and unclear speech.
+
+- Record expected transcripts and TTS evaluation text.
+- Use the same examples for provider comparisons.
+
+**Acceptance criteria**
+- The evaluation set is versioned and repeatable.
+- Do not record or reuse real user audio without appropriate permission.
+
+---
+
+# B. LiveKit Agent Bootstrap
+
+## P07 — Create Minimal LiveKit Agent
+
+**Deliverable:** Agent process starts.
+
+- Use the official Python LiveKit Agents starter as the baseline.
+- Keep the entry point separate from configuration and business integrations.
+- Avoid adding memory and external tools.
+
+**Acceptance criteria**
+- The agent starts with valid local credentials.
+
+## P08 — Verify Agent Lifecycle
+
+**Deliverable:** Reliable room lifecycle.
+
+- Join a test room.
+- Observe participant join/leave.
+- Handle graceful shutdown and cancellation.
+- Log connection failures.
+
+**Acceptance criteria**
+- The process can join and leave a test session predictably.
+
+## P09 — Verify Agent Dispatch
+
+**Deliverable:** Browser-created session can activate the agent.
+
+- Use the supported LiveKit agent dispatch/session workflow.
+- Associate a dispatched job with the intended room.
+- Avoid accepting arbitrary room/user identifiers as trusted identity.
+
+**Acceptance criteria**
+- A test room can activate the correct worker.
+
+---
+
+# C. Speech-to-Text
+
+## P10 — Integrate Deepgram Nova-3
+
+**Deliverable:** Streaming Arabic STT.
+
+- Add the current LiveKit Deepgram Python plugin.
+- Configure the model and Saudi Arabic locale `ar-SA`.
+- Keep the locale configurable.
+- Use a direct Deepgram key for the plugin-based integration.
+
+**Acceptance criteria**
+- Arabic speech generates transcription events in a real test session.
+
+## P11 — Handle STT Events
+
+**Deliverable:** Correct partial/final transcript processing.
+
+- Distinguish interim and finalized transcription.
+- Preserve turn and speaker association.
+- Avoid persisting partial transcripts as duplicate final messages.
+- Handle empty and failed recognition.
+
+**Acceptance criteria**
+- A finalized user turn is identified once.
+
+## P12 — Evaluate STT Accuracy
+
+**Deliverable:** STT benchmark report.
+
+- Run the fixed Arabic corpus.
+- Compare output with expected text.
+- Document names, numbers, mixed-language, and dialect errors.
+- Measure time from speech ending to finalized transcription where available.
+
+**Acceptance criteria**
+- Recognition quality and latency are recorded.
+- Any model/configuration changes are compared against the same corpus.
+
+---
+
+# D. Text-to-Speech
+
+## P13 — Integrate ElevenLabs Flash v2.5
+
+**Deliverable:** Primary low-latency TTS.
+
+- Add the official LiveKit ElevenLabs Python plugin.
+- Configure `ELEVEN_API_KEY`.
+- Use `eleven_flash_v2_5` as the initial model.
+- Configure a selected Saudi-compatible voice ID.
+- Keep the model and voice ID in environment/configuration rather than scattered source code.
+
+**Acceptance criteria**
+- The agent can generate and stream audible Arabic speech.
+- Provider credentials remain server-side.
+
+## P14 — Add TTS Text Normalization
+
+**Deliverable:** Predictable spoken numbers and dates.
+
+- Review how the selected model reads Arabic numbers, dates, times, prices, and phone numbers.
+- Normalize ambiguous numeric text before synthesis where required.
+- Use supported provider normalization options only after verifying account/model support.
+
+**Acceptance criteria**
+- The fixed evaluation set avoids known number-reading errors.
+
+## P15 — Compare ElevenLabs Multilingual v2
+
+**Deliverable:** Quality/latency comparison.
+
+- Reuse the same Saudi Arabic sentences.
+- Choose an appropriate voice from the provider's voice library for each compatible model.
+- Compare naturalness, Saudi accent suitability, pronunciation, numeric reading, and latency.
+- Record the voice ID/model used for every test.
+
+**Acceptance criteria**
+- Flash v2.5 remains primary unless the measured quality/latency trade-off justifies changing it.
+- Do not claim the best Saudi voice without test evidence.
+
+## P16 — Implement a TTS Configuration Boundary
+
+**Deliverable:** Replaceable TTS configuration.
+
+- Centralize model, voice ID, locale, and optional generation settings.
+- Keep provider selection separate from conversation logic.
+- Document how to compare a future alternative.
+
+**Acceptance criteria**
+- Changing the configured TTS model does not require rewriting session management.
+
+---
+
+# E. LLM and Voice Pipeline
+
+## P17 — Integrate OpenAI Text LLM
+
+**Deliverable:** Streaming text generation.
+
+- Use the LiveKit-compatible OpenAI text LLM integration.
+- Do not use OpenAI Realtime as the speech pipeline.
+- Configure model, API key, system prompt, and reasonable timeouts.
+- Stream text as supported by the provider.
+
+**Acceptance criteria**
+- Given text input, the LLM produces a valid Arabic response.
+
+## P18 — Define Arabic Assistant Instructions
+
+**Deliverable:** Initial system prompt.
+
+- Define the Saudi Arabic response style.
+- Keep spoken responses concise and natural.
+- Define how uncertainty and unsupported requests are handled.
+- Instruct the model to use real tool results instead of inventing external data.
+- Separate user facts from system instructions.
+
+**Acceptance criteria**
+- Fixed prompts produce acceptable, grounded answers.
+
+## P19 — Build First Complete Voice Turn
+
+**Deliverable:** End-to-end STT → LLM → TTS.
+
+- Receive finalized user speech.
+- Generate a text response.
+- Start TTS generation without waiting unnecessarily for the entire response.
+- Stream audio to the LiveKit participant.
+
+**Acceptance criteria**
+- A person can speak Saudi Arabic and hear an assistant response.
+
+## P20 — Tune Streaming Boundaries
+
+**Deliverable:** Reduced wait before speech starts.
+
+- Send suitable LLM text segments to TTS as early as supported.
+- Avoid sending single-word fragments that lead to unnatural playback.
+- Avoid waiting for long full responses before synthesis.
+- Record first-token and first-audio timings.
+
+**Acceptance criteria**
+- The change is compared against a baseline on identical utterances.
+
+## P21 — Configure Turn Detection
+
+**Deliverable:** Reliable end-of-turn behavior.
+
+- Configure VAD and the supported turn detector.
+- Set an initial endpointing strategy.
+- Test natural pauses and short utterances.
+- Avoid replying to every partial transcript.
+
+**Acceptance criteria**
+- Normal pauses do not repeatedly trigger premature replies.
+
+## P22 — Implement Interruptions and Cancellation
+
+**Deliverable:** Natural barge-in behavior.
+
+- Stop or cancel ongoing assistant speech when the user interrupts, as supported by the framework.
+- Prevent old generated responses from continuing after cancellation.
+- Handle a new user turn arriving during cancellation.
+
+**Acceptance criteria**
+- The user can interrupt an answer and start a new turn without ending the call.
+
+## P23 — Add Bounded Session Context
+
+**Deliverable:** Per-session conversational context.
+
+- Preserve ordered messages within the current session.
+- Limit context growth.
+- Avoid duplicating partial and final messages.
+- Keep provider/tool outputs distinct from user and assistant content.
+
+**Acceptance criteria**
+- Several consecutive turns remain coherent without unbounded context growth.
+
+---
+
+# F. Next.js Backend Integration
+
+## P24 — Implement Internal HTTP Client
+
+**Deliverable:** Typed/validated backend client.
+
+- Centralize the Next.js base URL and service credential.
+- Add request timeouts.
+- Validate response schemas.
+- Standardize error handling and correlation IDs.
+
+**Acceptance criteria**
+- The agent can call a local authenticated backend test endpoint.
+
+## P25 — Authorize the Voice Session
+
+**Deliverable:** Trusted session context.
+
+- Read the expected room/session context from the server-controlled LiveKit session.
+- Call the Next.js internal authorization API.
+- Verify conversation ownership and status.
+- Do not accept a user ID from an LLM tool argument as proof of identity.
+
+**Acceptance criteria**
+- The session is bound to a backend-authorized user and conversation.
+
+## P26 — Persist User Transcripts
+
+**Deliverable:** User messages saved to Next.js.
+
+- Submit finalized user turns to the internal transcript API.
+- Include a unique event/turn identifier where available.
+- Retry only where safe.
+- Avoid persisting partial transcript updates as new messages.
+
+**Acceptance criteria**
+- Completed user turns appear once in the database.
+
+## P27 — Persist Assistant Transcripts
+
+**Deliverable:** Assistant messages saved to Next.js.
+
+- Persist the final generated assistant text.
+- Respect turn ordering.
+- Handle interrupted and incomplete responses explicitly.
+- Avoid duplicate writes during retries.
+
+**Acceptance criteria**
+- Completed assistant turns appear once and match the generated response.
+
+---
+
+# G. Persistent Memory and Tools
+
+## P28 — Retrieve Memory at Session Start
+
+**Deliverable:** User memory loaded into the agent context.
+
+- Call the authenticated memory retrieval API.
+- Use only the current user's permitted memories.
+- Add relevant facts to conversational context.
+- Treat memory as factual context, not executable instructions.
+
+**Acceptance criteria**
+- A fact saved in an earlier session can influence a new session.
+
+## P29 — Define Memory Extraction Tool
+
+**Deliverable:** Safe memory-write interface.
+
+- Define a narrow tool for stable preferences and relevant facts.
+- Validate keys and value sizes.
+- Require explicit backend confirmation before acknowledging that a fact was saved.
+- Handle corrections and replacements.
+
+**Acceptance criteria**
+- Invalid or unsupported memory writes are rejected.
+
+## P30 — Handle Memory Failures
+
+**Deliverable:** Graceful memory errors.
+
+- Set timeouts.
+- Avoid infinite retries.
+- Continue ordinary conversation when memory is unavailable, where possible.
+- Never claim successful persistence without backend confirmation.
+
+**Acceptance criteria**
+- Memory service failure does not crash the entire voice worker.
+
+## P31 — Implement Weather Tool
+
+**Deliverable:** External weather data is accessible to the LLM.
+
+- Define a typed weather tool schema.
+- Validate city/location arguments.
+- Call the protected Next.js endpoint.
+- Return structured weather data.
+- Explain unavailable information honestly.
+
+**Acceptance criteria**
+- The assistant can answer a weather question from real external data.
+
+## P32 — Protect Tool Execution
+
+**Deliverable:** Tool-call safety rules.
+
+- Restrict tool names and argument schemas.
+- Prevent arbitrary URL fetching.
+- Never expose service secrets through tool responses.
+- Enforce server-side authorization independently of LLM instructions.
+
+**Acceptance criteria**
+- Invalid or unauthorized tool calls fail safely.
+
+## P33 — Implement Provider Error Recovery
+
+**Deliverable:** Bounded failure handling.
+
+- Handle LiveKit disconnects, STT errors, LLM failures, TTS failures, and backend outages separately.
+- Apply timeouts and bounded retries only where safe.
+- Add a short fallback response when possible.
+- Make cancelled requests stop consuming unnecessary resources.
+
+**Acceptance criteria**
+- A provider error does not create an unhandled process failure.
+
+---
+
+# H. Latency Metrics and Profiling
+
+## P34 — Capture Native Per-turn Metrics
+
+**Deliverable:** Structured LiveKit pipeline measurements.
+
+Use current per-turn metrics where supported, including:
+- `end_of_turn_delay`
+- `transcription_delay`
+- `llm_node_ttft`
+- `llm_node_ttfs`
+- `llm_node_tps`
+- `tts_node_ttfb`
+- `e2e_latency`
+
+Use per-turn `ChatMessage.metrics` for latency collection; do not build new reporting around the deprecated session-level `metrics_collected` event.
+
+**Acceptance criteria**
+- Metric meaning and source are documented.
+- Missing metrics are handled without breaking the call.
+
+## P35 — Measure First Audio Separately
+
+**Deliverable:** First-audio timing definition.
+
+- Record the relevant user-turn completion and agent-response events.
+- Record TTS first-chunk timing.
+- Coordinate with the browser plan to record first observed playback.
+- Clearly distinguish agent/pipeline latency from actual browser-observed audio playback.
+- Do not interpret LiveKit's internal playback field as an exact measure of what a remote user heard.
+
+**Acceptance criteria**
+- Each reported latency metric has an explicit start/end definition.
+
+## P36 — Export Structured Timing Records
+
+**Deliverable:** JSONL or equivalent structured metric records.
+
+Include:
+- Run ID, conversation/session ID, turn ID.
+- Locale and model/voice configuration.
+- Per-stage timings.
+- E2E latency.
+- Outcome/error/cancellation status.
+- Timestamp and runtime environment.
+
+Do not store raw audio or unnecessary private conversation content in metric records.
+
+**Acceptance criteria**
+- Measurements can be processed without manually reading logs.
+
+## P37 — Build Percentile Aggregation Script
+
+**Deliverable:** Repeatable P50/P95 report.
+
+- Calculate P50 and P95 for each metric.
+- Group results by locale, provider/model, environment, and test configuration.
+- Report sample count and failures.
+- Keep failed/timed-out turns visible as separate reliability results rather than silently excluding them.
+
+**Acceptance criteria**
+- Identical input records produce the same summary report.
+
+## P38 — Establish Baseline Measurements
+
+**Deliverable:** First performance baseline.
+
+Measure:
+- End-of-turn delay.
+- Transcription delay.
+- LLM time to first token.
+- Time until text reaches TTS.
+- TTS time to first audio chunk.
+- E2E latency.
+- Browser first-audio playback observations.
+
+Aim for at least 100 turns per configuration for an initial P95 estimate where time permits. If the take-home timeframe only allows fewer samples, label the P95 as preliminary and report the sample size.
+
+**Acceptance criteria**
+- Baseline values and test limitations are documented.
+- No target is claimed as achieved without evidence.
+
+## P39 — Compare TTS and Pipeline Configurations
+
+**Deliverable:** Performance/quality comparison.
+
+- Compare ElevenLabs Flash v2.5 and Multilingual v2.
+- Reuse the same phrases and compatible voice configurations.
+- Compare P50/P95 plus Saudi accent suitability, naturalness, numbers, names, and interruptions.
+- Change one variable at a time.
+
+**Acceptance criteria**
+- Final TTS choice is supported by measured evidence.
+
+## P40 — Profile Only After Finding a Bottleneck
+
+**Deliverable:** Targeted profile.
+
+- Use stage metrics to decide if delay originates in the provider, networking, waiting for turn completion, or local code.
+- Use a Python profiler such as `py-spy` or `cProfile` when local CPU/blocking behavior is suspected.
+- Investigate event-loop blocking and unnecessary synchronous work.
+- Do not profile local code to explain delay that is clearly external provider/network wait.
+
+**Acceptance criteria**
+- Each profile is tied to a concrete question and leads to a documented decision.
+
+## P41 — Verify Optimization
+
+**Deliverable:** Before/after comparison.
+
+- Repeat the same workload after one optimization.
+- Compare P50/P95, errors, audio quality, and interruption behavior.
+- Record changes in test conditions.
+
+**Acceptance criteria**
+- No optimization is declared successful solely from anecdotal testing.
+
+---
+
+# I. Testing, Packaging, and Deployment
+
+## P42 — Add Unit Tests
+
+**Deliverable:** Tests for non-live logic.
+
+Cover:
+- Configuration.
+- Tool argument validation.
+- Backend client errors.
+- Memory request handling.
+- Turn/message deduplication.
+- Metric aggregation.
+
+**Acceptance criteria**
+- Unit tests run without paid real speech calls.
+
+## P43 — Add Provider Smoke Tests
+
+**Deliverable:** Controlled real-provider checks.
+
+- Run a small test for STT, LLM, and TTS credentials.
+- Keep these tests separate from ordinary unit tests.
+- Handle provider rate limits and usage costs.
+
+**Acceptance criteria**
+- Provider integration can be verified on demand.
+
+## P44 — Add Conversation Test Matrix
+
+**Deliverable:** Repeatable voice test checklist.
+
+Test:
+- Saudi Arabic greeting.
+- Arabic-English mixed speech.
+- Names, dates, and numeric values.
+- Unclear input and silence.
+- User interruption.
+- Memory across sessions.
+- Weather success and failure.
+- Backend disconnect.
+- Call termination.
+
+**Acceptance criteria**
+- Failures, latency, and speech-quality observations are recorded.
+
+## P45 — Build Production Container
+
+**Deliverable:** Production Docker image.
+
+- Add Dockerfile.
+- Install pinned dependencies.
+- Use runtime-supplied environment variables.
+- Run as a non-root user where practical.
+- Do not bake secrets into the image.
+
+**Acceptance criteria**
+- Image builds and starts in a clean environment.
+
+## P46 — Prepare Agent Deployment
+
+**Deliverable:** Reproducible deployment procedure.
+
+- Select the worker host and LiveKit environment.
+- Configure dispatch, secrets, and service-to-service network access.
+- Ensure the worker can reach providers and the Next.js backend.
+- Document scaling/concurrency assumptions.
+
+**Acceptance criteria**
+- Deployment is repeatable from documented steps.
+
+## P47 — Deploy and Smoke-test
+
+**Deliverable:** Working hosted agent.
+
+- Start the deployed worker.
+- Activate a real LiveKit room.
+- Verify audio round trip, provider credentials, transcript persistence, and disconnect cleanup.
+- Review safe runtime logs.
+
+**Acceptance criteria**
+- A real deployed voice conversation works outside local development.
+
+## P48 — Document the Voice Repository
+
+**Deliverable:** Maintainer-ready README.
+
+Include:
+- Python and dependency manager versions.
+- Environment variables.
+- LiveKit agent startup command.
+- Selected STT/LLM/TTS configuration.
+- Arabic benchmark method and results.
+- Metrics fields and percentile methodology.
+- Local tests, deployment, costs/limitations, and known issues.
+
+**Acceptance criteria**
+- Another developer can run the agent and understand its measured behavior from the README.
