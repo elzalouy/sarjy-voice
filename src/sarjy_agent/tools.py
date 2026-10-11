@@ -16,7 +16,6 @@ from sarjy_agent.backend import (
     BackendClient,
     BackendError,
     MemoryFact,
-    MemoryKey,
     MemoryWrite,
     WeatherReport,
     authorized_user_id,
@@ -36,8 +35,8 @@ _LABELS = {
     "preferred_name": "اسم الشخص",
     "city": "المدينة",
     "language": "اللغة",
+    "favorite_color": "اللون المفضل",
 }
-_VALUE_LIMITS = {"preferred_name": 40, "city": 80}
 _SENSITIVE = re.compile(
     r"\b(password|passwd|secret|token|api[-_ ]?key|bearer|ssn|cvv|credit card)\b",
     re.IGNORECASE,
@@ -60,31 +59,38 @@ def memory_fact_lines(facts: Sequence[MemoryFact]) -> tuple[str, ...]:
     """Turn saved preferences into fact lines. They are data, not instructions."""
     lines: list[str] = []
     for fact in facts:
-        label = _LABELS.get(fact.key)
-        if label is None or not fact.value.strip():
+        if not fact.value.strip():
             continue
+        label = _LABELS.get(fact.key, fact.key)
         lines.append(f"{label}: {fact.value.strip()}.")
     return tuple(lines)
 
 
-def review_memory_value(key: str, value: str) -> str | None:
-    """Return a cleaned value, or nothing when the key or value is not allowed."""
-    if key not in _LABELS:
+def review_memory_key(key: str) -> str | None:
+    """Return a short fact name, or nothing when the name is a secret."""
+    cleaned = "_".join(key.strip().lower().split())
+    if not cleaned or len(cleaned) > 64 or _CONTROL.search(cleaned):
         return None
-    if _CONTROL.search(value):
-        return None
-    if key == "language":
-        cleaned = value.strip().lower()
-        if cleaned not in {"ar", "en"}:
-            return None
-        return cleaned
-    cleaned = " ".join(value.split())
-    limit = _VALUE_LIMITS[key]
-    if not cleaned or len(cleaned) > limit or _URLISH.search(cleaned):
-        return None
-    if _SENSITIVE.search(cleaned) or _EMAIL.search(cleaned) or _has_phone(cleaned):
+    if _is_sensitive(cleaned):
         return None
     return cleaned
+
+
+def review_memory_value(key: str, value: str) -> str | None:
+    """Return a cleaned value, or nothing when the key or value is a secret."""
+    if review_memory_key(key) is None or _CONTROL.search(value):
+        return None
+    cleaned = " ".join(value.split())
+    if not cleaned or len(cleaned) > 80 or _is_sensitive(cleaned):
+        return None
+    if _EMAIL.search(cleaned) or _has_phone(cleaned):
+        return None
+    return cleaned
+
+
+def _is_sensitive(text: str) -> bool:
+    """True for a password, token, or other secret word."""
+    return _SENSITIVE.search(text) is not None
 
 
 def review_location(value: str) -> str | None:
@@ -113,36 +119,37 @@ def build_voice_tools(
     @function_tool(
         name="remember_preference",
         description=(
-            "Save a preference the person just asked to remember. "
-            "key is preferred_name, city, or language. "
-            "language is ar or en. "
+            "Save a fact the person just said. "
+            "key is a short name, such as preferred_name, city, language, "
+            "or favorite_color. "
+            "Do not save a password, token, email, or phone number. "
             "Say it was saved only when the result says saved."
         ),
     )
-    async def remember_preference(key: MemoryKey, value: str) -> str:
+    async def remember_preference(key: str, value: str) -> str:
         """Save one allowed preference for the authorized user."""
         return await _remember(client, user_id, key, value)
 
     @function_tool(
         name="correct_preference",
         description=(
-            "Replace a preference that was already saved. "
-            "key is preferred_name, city, or language. "
+            "Replace a saved fact. "
+            "key is the same short name used when it was saved. "
+            "Do not save a password, token, email, or phone number. "
             "Say it was updated only when the result says saved."
         ),
     )
-    async def correct_preference(key: MemoryKey, value: str) -> str:
+    async def correct_preference(key: str, value: str) -> str:
         """Replace one existing preference for the authorized user."""
         return await _correct(client, user_id, key, value)
 
     @function_tool(
         name="forget_preference",
         description=(
-            "Delete one saved preference when the person asks to forget it. "
-            "key is preferred_name, city, or language."
+            "Delete one saved fact when the person asks to forget it."
         ),
     )
-    async def forget_preference(key: MemoryKey) -> str:
+    async def forget_preference(key: str) -> str:
         """Delete one preference for the authorized user."""
         return await _forget(client, user_id, key)
 
@@ -171,13 +178,14 @@ def build_voice_tools(
 
 async def _remember(client: BackendClient, user_id: str, key: str, value: str) -> str:
     """Store a preference and report only the backend's saved row."""
+    checked = review_memory_key(key)
     cleaned = review_memory_value(key, value)
-    if cleaned is None or key not in {"preferred_name", "city", "language"}:
+    if checked is None or cleaned is None:
         return _REJECTED
     try:
         saved = await client.remember(
             user_id,
-            MemoryWrite(key=key, value=cleaned),  # type: ignore[arg-type]
+            MemoryWrite(key=checked, value=cleaned),
         )
     except BackendError:
         return _UNAVAILABLE
@@ -186,13 +194,14 @@ async def _remember(client: BackendClient, user_id: str, key: str, value: str) -
 
 async def _correct(client: BackendClient, user_id: str, key: str, value: str) -> str:
     """Replace a stored preference. A missing key is not a success."""
+    checked = review_memory_key(key)
     cleaned = review_memory_value(key, value)
-    if cleaned is None or key not in {"preferred_name", "city", "language"}:
+    if checked is None or cleaned is None:
         return _REJECTED
     try:
         saved = await client.correct(
             user_id,
-            MemoryWrite(key=key, value=cleaned),  # type: ignore[arg-type]
+            MemoryWrite(key=checked, value=cleaned),
         )
     except BackendError as exc:
         if exc.error_type == "NotFound":
@@ -203,15 +212,16 @@ async def _correct(client: BackendClient, user_id: str, key: str, value: str) ->
 
 async def _forget(client: BackendClient, user_id: str, key: str) -> str:
     """Delete one preference. A missing key is not described as deleted."""
-    if key not in _LABELS:
+    checked = review_memory_key(key)
+    if checked is None:
         return _REJECTED
     try:
-        deleted = await client.forget(user_id, key)  # type: ignore[arg-type]
+        deleted = await client.forget(user_id, checked)
     except BackendError:
         return _UNAVAILABLE
     if not deleted:
         return _NOT_SAVED
-    return f"deleted {key}"
+    return f"deleted {checked}"
 
 
 async def _weather(client: BackendClient, location: str) -> str:

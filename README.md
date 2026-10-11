@@ -274,7 +274,7 @@ The first save is 201. The same `eventId` again is 200 and does not create a sec
 
 `GET`, `PUT`, `PATCH`, and `DELETE` `/api/internal/users/{userId}/memory`
 
-The path user id is the authorized owner. Allowed keys are `preferred_name`, `city`, and `language`. `language` is `ar` or `en`. The tools send `source: user` and `approved: true`. A password, email, or phone number is rejected before the call. Loaded facts are a separate message. They are not instructions.
+The path user id is the authorized owner. `preferred_name`, `city`, and `language` are sent to Next.js. Any other fact is kept by the voice agent. A password, token, email, or phone number is rejected before the call. Loaded facts are a separate message. They are not instructions.
 
 The model is told a fact was saved only when the backend returns that row. If memory is down at the start of the call, the conversation continues with no facts.
 

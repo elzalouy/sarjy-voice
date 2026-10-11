@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+import threading
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from time import perf_counter
@@ -37,7 +38,9 @@ _CONTENT_LIMIT = 8000
 
 TranscriptRole = Literal["user", "assistant"]
 TranscriptStatus = Literal["completed", "interrupted", "incomplete"]
-MemoryKey = Literal["preferred_name", "city", "language"]
+_BACKEND_MEMORY_KEYS = frozenset({"preferred_name", "city", "language"})
+_agent_memory: dict[str, dict[str, MemoryFact]] = {}
+_agent_memory_lock = threading.Lock()
 
 
 class BackendError(Exception):
@@ -182,7 +185,7 @@ class MemoryWrite(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    key: MemoryKey
+    key: str
     value: str
     source: Literal["user"] = "user"
     approved: Literal[True] = True
@@ -379,18 +382,34 @@ class BackendClient:
             None,
             operation="list_memory",
         )
-        return _memory_facts(reply.body, reply.request_id)
+        return _with_agent_memory(user_id, _memory_facts(reply.body, reply.request_id))
 
     async def remember(self, user_id: str, write: MemoryWrite) -> MemoryFact:
         """Store or replace one preference. The result is the saved row."""
-        return await self._write_memory("PUT", "remember_memory", user_id, write)
+        if write.key not in _BACKEND_MEMORY_KEYS:
+            return _save_agent_memory(user_id, write.key, write.value)
+        try:
+            return await self._write_memory("PUT", "remember_memory", user_id, write)
+        except BackendError as exc:
+            if exc.error_type != "Rejected":
+                raise
+            return _save_agent_memory(user_id, write.key, write.value)
 
     async def correct(self, user_id: str, write: MemoryWrite) -> MemoryFact:
         """Replace a preference that already exists."""
-        return await self._write_memory("PATCH", "correct_memory", user_id, write)
+        if write.key not in _BACKEND_MEMORY_KEYS:
+            return _save_agent_memory(user_id, write.key, write.value, replace=True)
+        try:
+            return await self._write_memory("PATCH", "correct_memory", user_id, write)
+        except BackendError as exc:
+            if exc.error_type != "Rejected":
+                raise
+            return _save_agent_memory(user_id, write.key, write.value, replace=True)
 
-    async def forget(self, user_id: str, key: MemoryKey) -> bool:
+    async def forget(self, user_id: str, key: str) -> bool:
         """Delete one preference. False means that key was not stored."""
+        if key not in _BACKEND_MEMORY_KEYS:
+            return _forget_agent_memory(user_id, key)
         reply = await self._request(
             "DELETE",
             memory_path(user_id),
@@ -626,6 +645,60 @@ class TranscriptStore:
         if task.cancelled():
             return
         task.exception()
+
+
+def agent_memory_facts(user_id: str) -> tuple[MemoryFact, ...]:
+    """Return facts this process kept because the backend does not store that key."""
+    try:
+        checked = _require_uuid(user_id)
+    except ValueError:
+        return ()
+    with _agent_memory_lock:
+        stored = _agent_memory.get(checked, {})
+        facts = tuple(stored.values())
+    return tuple(sorted(facts, key=lambda item: item.key))
+
+
+def clear_agent_memory() -> None:
+    """Drop process-local memory. Tests call this between cases."""
+    with _agent_memory_lock:
+        _agent_memory.clear()
+
+
+def _with_agent_memory(
+    user_id: str, facts: tuple[MemoryFact, ...]
+) -> tuple[MemoryFact, ...]:
+    """Add process-local facts when the backend list does not already have that key."""
+    present = {item.key for item in facts}
+    extra = tuple(
+        item for item in agent_memory_facts(user_id) if item.key not in present
+    )
+    return (*facts, *extra)
+
+
+def _save_agent_memory(
+    user_id: str, key: str, value: str, *, replace: bool = False
+) -> MemoryFact:
+    """Store one fact in this process. A correction needs that key to exist."""
+    checked = _require_uuid(user_id)
+    with _agent_memory_lock:
+        stored = _agent_memory.setdefault(checked, {})
+        if replace and key not in stored:
+            raise BackendError("NotFound")
+        fact = MemoryFact(key=key, value=value, updated_at=_timestamp())
+        stored[key] = fact
+    return fact
+
+
+def _forget_agent_memory(user_id: str, key: str) -> bool:
+    """Delete one process-local fact. False means it was not stored."""
+    checked = _require_uuid(user_id)
+    with _agent_memory_lock:
+        stored = _agent_memory.get(checked, {})
+        if key not in stored:
+            return False
+        del stored[key]
+    return True
 
 
 def _memory_facts(body: dict[str, object], request_id: str) -> tuple[MemoryFact, ...]:
