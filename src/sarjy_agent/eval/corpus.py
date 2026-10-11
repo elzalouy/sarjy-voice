@@ -207,6 +207,7 @@ def tts_inputs(corpus: EvaluationCorpus) -> tuple[tuple[str, str], ...]:
 
 
 def _data_directory() -> Path:
+    """Return the folder that holds the wav and txt pairs."""
     resource = files("sarjy_agent.eval").joinpath(DATA_DIR)
     if not resource.is_dir():
         raise CorpusError("The evaluation data folder is missing.")
@@ -214,6 +215,7 @@ def _data_directory() -> Path:
 
 
 def _pairs(directory: Path) -> list[tuple[str, Path, Path]]:
+    """Match each wav file with the txt file of the same name."""
     wavs: dict[str, Path] = {}
     texts: dict[str, Path] = {}
     for path in directory.iterdir():
@@ -243,6 +245,7 @@ def _corpus_from_pairs(
     directory: Path,
     pairs: Iterable[tuple[str, Path, Path]],
 ) -> EvaluationCorpus:
+    """Build one evaluation item from each wav and txt pair."""
     items: list[EvaluationItem] = []
     for stem, wav_path, text_path in pairs:
         if _STEM.fullmatch(stem) is None:
@@ -262,6 +265,7 @@ def _corpus_from_pairs(
 
 
 def _check_wav(path: Path) -> None:
+    """Raise if this file is not mono 16-bit audio."""
     try:
         with wave.open(str(path), "rb") as audio:
             channels = audio.getnchannels()
@@ -275,6 +279,7 @@ def _check_wav(path: Path) -> None:
 
 
 def _read_transcript(path: Path) -> str:
+    """Read one Arabic line from this txt file."""
     text = path.read_text(encoding="utf-8")
     if text.endswith("\n"):
         text = text[:-1]

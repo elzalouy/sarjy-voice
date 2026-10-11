@@ -39,6 +39,13 @@ class UserTurns:
         return tuple(self._finalized)
 
     @property
+    def stable_text(self) -> str:
+        """Return the finished pieces of the open turn, in order."""
+        if self._open is None:
+            return ""
+        return self._open.stable_text
+
+    @property
     def partial_text(self) -> str | None:
         """Return the latest partial text, or nothing if the user is not speaking."""
         if self._open is None or not self._open.partial_text:
@@ -108,6 +115,22 @@ def _merge_final(stable: str, text: str) -> str:
     """Add a final piece without repeating words already stored."""
     if not stable or text == stable or text.startswith(stable):
         return text
-    if stable.endswith(text):
+    if text in stable or stable.endswith(text):
         return stable
+    overlap = _overlap(stable, text)
+    if overlap:
+        return stable + text[overlap:]
     return f"{stable} {text}"
+
+
+def _overlap(stable: str, text: str) -> int:
+    """Return a shared word at the join, not a single letter in the middle of a word."""
+    limit = min(len(stable), len(text))
+    for size in range(limit, 0, -1):
+        if not stable.endswith(text[:size]):
+            continue
+        left_ok = size == len(stable) or stable[-(size + 1)] == " "
+        right_ok = size == len(text) or text[size] == " "
+        if left_ok and right_ok:
+            return size
+    return 0

@@ -4,8 +4,9 @@ import pytest
 from livekit.agents import AgentSession, inference
 from livekit.plugins import elevenlabs
 
-from conftest import VALID_ENV
+from conftest import VALID_ENV, allowing_backend
 from sarjy_agent.config import load_settings
+from sarjy_agent.dispatch import AssignedRoom
 from sarjy_agent.tts import create_tts
 from sarjy_agent.worker import Assistant, _start_voice_session, create_voice_session
 
@@ -76,6 +77,28 @@ def test_plugin_uses_the_settings_key_not_a_later_environment_value(
     assert "later-environment-key" not in repr(speaker)
 
 
+def test_the_first_sentence_is_ready_before_the_reply_ends(valid_env: None) -> None:
+    speaker = create_tts(load_settings())
+
+    assert speaker._opts.auto_mode is True
+    assert speaker.capabilities.streaming is True
+
+    first = asyncio.run(_first_sentence(speaker))
+
+    assert "السلام" in first
+    assert "أساعدك" not in first
+
+
+async def _first_sentence(speaker: elevenlabs.TTS) -> str:
+    stream = speaker._opts.word_tokenizer.stream()
+    stream.push_text("وعليكم السلام. كيف أقدر أساعدك")
+    try:
+        item = await asyncio.wait_for(anext(stream), timeout=1)
+    finally:
+        await stream.aclose()
+    return item.token
+
+
 def test_voice_session_speaks_with_elevenlabs(valid_env: None) -> None:
     session = asyncio.run(_voice_session())
 
@@ -84,7 +107,7 @@ def test_voice_session_speaks_with_elevenlabs(valid_env: None) -> None:
     assert session.tts.model == "eleven_flash_v2_5"
     assert session.tts._opts.voice_id == "voice-test"
     assert session.tts._opts.language.language == "ar"
-    assert session.llm is None
+    assert session.llm is not None
 
 
 async def _voice_session() -> AgentSession[None]:
@@ -99,9 +122,19 @@ def test_job_starts_a_session_with_the_configured_speaker(
     started: dict[str, object] = {}
 
     class _Session:
-        def __init__(self, *, stt: object, tts: object) -> None:
+        def __init__(
+            self,
+            *,
+            stt: object,
+            llm: object,
+            tts: object,
+            vad: object = None,
+            turn_handling: object = None,
+        ) -> None:
             started["stt"] = stt
+            started["llm"] = llm
             started["tts"] = tts
+            self._events: dict[str, dict[object, None]] = {}
 
         def on(self, _event: str, _callback: object) -> None:
             return None
@@ -116,9 +149,23 @@ def test_job_starts_a_session_with_the_configured_speaker(
     class _Context:
         room = _Room()
 
-    monkeypatch.setattr("sarjy_agent.worker.AgentSession", _Session)
+        def add_shutdown_callback(self, _callback: object) -> None:
+            return None
 
-    asyncio.run(_start_voice_session(_Context()))  # type: ignore[arg-type]
+    monkeypatch.setattr("sarjy_agent.worker.AgentSession", _Session)
+    monkeypatch.setattr("sarjy_agent.worker.create_backend", allowing_backend)
+
+    asyncio.run(
+        _start_voice_session(
+            _Context(),  # type: ignore[arg-type]
+            AssignedRoom(
+                job_id="AJ_job1",
+                dispatch_id="AD_dispatch1",
+                room_name="test-room",
+                room_sid="RM_testroom",
+            ),
+        )
+    )
 
     speaker = started["tts"]
     assert isinstance(speaker, elevenlabs.TTS)

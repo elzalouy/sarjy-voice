@@ -64,6 +64,37 @@ def test_public_id_keeps_only_short_ids() -> None:
     assert public_id("") is None
 
 
+def test_a_stop_error_ends_the_visit_before_the_session_starts() -> None:
+    stream = StringIO()
+
+    class _Stop(Exception):
+        pass
+
+    async def scenario() -> int:
+        configure_logging(stream)
+        room = _Room()
+
+        async def connect() -> None:
+            room.connected = True
+            raise _Stop
+
+        lifecycle = SessionLifecycle(
+            room=room,
+            connect=connect,
+            add_shutdown_callback=lambda _callback: None,
+            room_id="RM_room1",
+            session_id="AJ_job1",
+            stop_errors=(_Stop,),
+        )
+        await lifecycle.run()
+        return room.disconnects
+
+    disconnects = asyncio.run(scenario())
+
+    assert disconnects == 1
+    assert _events(stream) == []
+
+
 def test_join_then_shutdown_leaves_once() -> None:
     stream = StringIO()
 

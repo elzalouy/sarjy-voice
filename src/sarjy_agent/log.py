@@ -50,6 +50,7 @@ _ALLOWED_FIELDS = frozenset(
         "invalid_settings",
         "participant_id",
         "end_reason",
+        "request_id",
     }
 )
 
@@ -263,6 +264,7 @@ def log_provider_failure(
     operation: str,
     error_type: str,
     duration_ms: float | None = None,
+    request_id: str | None = None,
 ) -> None:
     """Log a provider failure with a short error name and no message text."""
     fields: dict[str, object] = {
@@ -272,6 +274,8 @@ def log_provider_failure(
     }
     if duration_ms is not None:
         fields["duration_ms"] = _require_duration(duration_ms)
+    if request_id is not None:
+        fields["request_id"] = _require_value(request_id, "request_id")
     _emit(logging.ERROR, "provider_failure", fields)
 
 

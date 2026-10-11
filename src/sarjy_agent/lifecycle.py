@@ -28,7 +28,9 @@ class _Participant(Protocol):
     """The only participant fact this module reads: a short session id."""
 
     @property
-    def sid(self) -> str: ...
+    def sid(self) -> str:
+        """The person's short session id."""
+        ...
 
 
 _RoomEvent = Literal[
@@ -41,16 +43,26 @@ _RoomEvent = Literal[
 class _Room(Protocol):
     """The room events this module needs: join, leave, disconnect, and close."""
 
-    def on(self, event: _RoomEvent, callback: Callable[..., object]) -> object: ...
+    def on(self, event: _RoomEvent, callback: Callable[..., object]) -> object:
+        """Start listening for one room event."""
+        ...
 
-    def off(self, event: _RoomEvent, callback: Callable[..., object]) -> None: ...
+    def off(self, event: _RoomEvent, callback: Callable[..., object]) -> None:
+        """Stop listening for one room event."""
+        ...
 
-    def isconnected(self) -> bool: ...
+    def isconnected(self) -> bool:
+        """Return true when the room is still connected."""
+        ...
 
-    async def disconnect(self) -> None: ...
+    async def disconnect(self) -> None:
+        """Leave the room."""
+        ...
 
     @property
-    def remote_participants(self) -> Mapping[str, _Participant]: ...
+    def remote_participants(self) -> Mapping[str, _Participant]:
+        """The people in the room, by their id."""
+        ...
 
 
 class SessionLifecycle:
@@ -66,13 +78,18 @@ class SessionLifecycle:
         ],
         room_id: str | None,
         session_id: str | None,
+        stop_errors: tuple[type[BaseException], ...] = (),
     ) -> None:
-        """Remember the room, the connect function, and the log ids."""
+        """Remember the room, the connect function, and the log ids.
+
+        An error listed in stop_errors ends the visit before the session starts.
+        """
         self._room = room
         self._connect = connect
         self._add_shutdown_callback = add_shutdown_callback
         self._room_id = room_id
         self._session_id = session_id
+        self._stop_errors = stop_errors
         self._started = False
         self._closed = False
         self._lost = False
@@ -89,6 +106,9 @@ class SessionLifecycle:
             await self.leave("cancelled")
             raise
         except Exception as exc:
+            if isinstance(exc, self._stop_errors):
+                await self.leave("shutdown")
+                return
             self._log_failure("connect", _error_type(exc))
             await self.leave("connection_lost")
             raise

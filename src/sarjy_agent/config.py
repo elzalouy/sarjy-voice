@@ -69,6 +69,9 @@ class Settings(BaseSettings):
     deepgram_api_key: SecretStr
     eleven_api_key: SecretStr
     openai_api_key: SecretStr
+    llm_model: str = "gpt-4.1-mini"
+    llm_timeout_seconds: float = 30.0
+    backend_timeout_seconds: float = 2.0
     nextjs_api_base_url: AnyHttpUrl
     agent_service_token: SecretStr
     stt_model: str = "nova-3"
@@ -95,6 +98,7 @@ class Settings(BaseSettings):
         "tts_voice_id",
         "tts_locale",
         "tts_text_normalization",
+        "llm_model",
     )
     @classmethod
     def text_must_not_be_blank(cls, value: str) -> str:
@@ -103,6 +107,22 @@ class Settings(BaseSettings):
         if not stripped:
             raise ValueError("must not be blank")
         return stripped
+
+    @field_validator("llm_timeout_seconds")
+    @classmethod
+    def timeout_must_be_reasonable(cls, value: float) -> float:
+        """Keep the text-model wait between 1 and 120 seconds."""
+        if value < 1 or value > 120:
+            raise ValueError("must be from 1 to 120 seconds")
+        return value
+
+    @field_validator("backend_timeout_seconds")
+    @classmethod
+    def backend_timeout_must_be_reasonable(cls, value: float) -> float:
+        """Keep the Next.js wait between 0.2 and 10 seconds."""
+        if value < 0.2 or value > 10:
+            raise ValueError("must be from 0.2 to 10 seconds")
+        return value
 
     @field_validator("tts_text_normalization")
     @classmethod

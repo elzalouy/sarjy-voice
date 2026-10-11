@@ -17,6 +17,7 @@ from sarjy_agent.dispatch import (
     AssignedRoom,
     bind_session,
     browser_dispatch,
+    conversation_id_from_job,
     dispatch_request,
     handle_job_request,
 )
@@ -185,6 +186,22 @@ def test_test_room_activates_this_worker_without_taking_a_user_id() -> None:
     assert stream.getvalue() == ""
 
 
+def test_conversation_id_comes_from_job_metadata_and_a_user_id_does_not() -> None:
+    conversation_id = "22222222-2222-4222-8222-222222222222"
+    user_id = "11111111-1111-4111-8111-111111111111"
+    job = _job(
+        metadata=(
+            '{"conversationId":"' + conversation_id + '","userId":"' + user_id + '"}'
+        )
+    )
+    dispatch = browser_dispatch(conversation_id)
+
+    assert conversation_id_from_job(job) == conversation_id
+    assert conversation_id_from_job(_job()) is None
+    assert user_id not in dispatch.metadata
+    assert dispatch.metadata == '{"conversationId":"' + conversation_id + '"}'
+
+
 def test_metadata_room_does_not_replace_the_job_room() -> None:
     job = _job()
 
@@ -252,7 +269,7 @@ def test_session_joins_the_job_room_only(monkeypatch: pytest.MonkeyPatch) -> Non
     stream = StringIO()
     started: list[str] = []
 
-    async def start(ctx: _Context) -> None:
+    async def start(ctx: _Context, _assigned: object) -> None:
         started.append(ctx.room.name)
         ctx.room.connected = True
 

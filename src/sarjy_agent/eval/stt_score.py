@@ -461,6 +461,11 @@ def _wer(hypothesis: str, reference: str) -> float:
     return _distance(hyp, ref) / len(ref)
 
 
+def word_tokens(text: str) -> list[str]:
+    """Split text into words, ignoring punctuation and Arabic vowel marks."""
+    return _tokens(text)
+
+
 def _tokens(text: str) -> list[str]:
     """Split text into words, ignoring punctuation and Arabic vowel marks."""
     stripped = _HARAKAT.sub("", text).replace("\u0640", "")

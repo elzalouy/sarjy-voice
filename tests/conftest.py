@@ -22,6 +22,9 @@ ENV_KEYS = (
     "TTS_VOICE_ID",
     "TTS_LOCALE",
     "TTS_TEXT_NORMALIZATION",
+    "LLM_MODEL",
+    "LLM_TIMEOUT_SECONDS",
+    "BACKEND_TIMEOUT_SECONDS",
 )
 
 VALID_ENV = {
@@ -57,3 +60,28 @@ def valid_env(isolated_env: None, monkeypatch: pytest.MonkeyPatch) -> None:
     """Set a complete valid environment. Secret values include LEAK_MARKER."""
     for key, value in VALID_ENV.items():
         monkeypatch.setenv(key, value)
+
+
+def allowing_backend(_settings: object) -> object:
+    """A stand-in that authorizes whichever room the worker was given."""
+    from sarjy_agent.backend import AuthorizedSession
+    from sarjy_agent.dispatch import AssignedRoom
+
+    class _Client:
+        async def authorize(
+            self, assigned: AssignedRoom, conversation_id: str | None = None
+        ) -> AuthorizedSession:
+            del conversation_id
+            return AuthorizedSession(
+                user_id="11111111-1111-4111-8111-111111111111",
+                conversation_id="22222222-2222-4222-8222-222222222222",
+                room_name=assigned.room_name,
+                room_sid=assigned.room_sid,
+                job_id=assigned.job_id,
+                dispatch_id=assigned.dispatch_id,
+            )
+
+        async def aclose(self) -> None:
+            return None
+
+    return _Client()

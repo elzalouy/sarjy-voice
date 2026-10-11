@@ -63,7 +63,22 @@ def test_valid_settings_keep_speech_defaults(valid_env: None) -> None:
     assert settings.tts_voice_id == "voice-test"
     assert settings.tts_locale == "ar-SA"
     assert settings.tts_text_normalization == "off"
+    assert settings.llm_model == "gpt-4.1-mini"
+    assert settings.llm_timeout_seconds == 30.0
+    assert settings.backend_timeout_seconds == 2.0
     assert settings.livekit_api_key.get_secret_value() == VALID_ENV["LIVEKIT_API_KEY"]
+
+
+def test_a_backend_timeout_outside_the_range_is_invalid(
+    valid_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("BACKEND_TIMEOUT_SECONDS", "99")
+
+    with pytest.raises(SettingsError) as exc_info:
+        load_settings()
+
+    assert str(exc_info.value) == "Invalid settings: BACKEND_TIMEOUT_SECONDS."
+    assert "99" not in str(exc_info.value)
 
 
 def test_secret_values_do_not_appear_in_logs(

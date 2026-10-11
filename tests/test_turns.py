@@ -8,7 +8,7 @@ from livekit.agents.voice.events import ErrorEvent, UserInputTranscribedEvent
 
 from sarjy_agent.log import configure_logging
 from sarjy_agent.turns import UserTurns
-from sarjy_agent.worker import Assistant, _on_error, _on_transcript
+from sarjy_agent.worker import Assistant, _Fallback, _on_error, _on_transcript
 
 _SPEAKER = "S0"
 
@@ -146,7 +146,9 @@ def test_stt_failure_is_logged_without_the_transcript() -> None:
     secret = "السلام عليكم"
 
     _on_error(
+        object(),  # type: ignore[arg-type]
         turns,
+        _Fallback(),
         ErrorEvent(
             error=STTError(
                 timestamp=0,

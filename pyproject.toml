@@ -5,8 +5,10 @@ description = "Sarjy voice agent"
 readme = "README.md"
 requires-python = ">=3.13.16,<3.14"
 dependencies = [
+    "httpx>=0.28.1",
     "livekit-agents[deepgram]>=1.8.5",
     "livekit-plugins-elevenlabs==1.8.5",
+    "livekit-plugins-openai==1.8.5",
     "pydantic-settings>=2.15.0",
 ]
 

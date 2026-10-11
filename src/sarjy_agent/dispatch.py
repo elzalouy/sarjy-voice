@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+import json
+import re
 from dataclasses import dataclass
 
 from livekit.agents import JobRequest
 from livekit.api import CreateAgentDispatchRequest, RoomAgentDispatch
 
 from sarjy_agent.log import log_context, log_provider_failure, public_id
+
+_UUID = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+    re.IGNORECASE,
+)
 
 AGENT_NAME = "sarjy"
 AGENT_PARTICIPANT_NAME = "Sarjy"
@@ -37,9 +44,48 @@ class _Decision:
     error_type: str | None
 
 
-def browser_dispatch() -> RoomAgentDispatch:
-    """Name the sarjy agent on a participant token. The room comes from the token."""
-    return RoomAgentDispatch(agent_name=AGENT_NAME)
+def browser_dispatch(conversation_id: str | None = None) -> RoomAgentDispatch:
+    """Name the sarjy agent on a participant token. The room comes from the token.
+
+    When a conversation id is given, it is the only value in the dispatch metadata.
+    """
+    return RoomAgentDispatch(
+        agent_name=AGENT_NAME,
+        metadata=_dispatch_metadata(conversation_id),
+    )
+
+
+def conversation_id_from_job(job: object | None) -> str | None:
+    """Read conversationId from job metadata. A user id in that JSON is ignored."""
+    if job is None:
+        return None
+    raw = _text(getattr(job, "metadata", ""))
+    if not raw:
+        return None
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    return _uuid(parsed.get("conversationId"))
+
+
+def _dispatch_metadata(conversation_id: str | None) -> str:
+    """Return dispatch metadata, or an empty string when no conversation is named."""
+    if conversation_id is None:
+        return ""
+    checked = _uuid(conversation_id)
+    if checked is None:
+        raise ValueError("conversation_id must be a uuid")
+    return json.dumps({"conversationId": checked}, separators=(",", ":"))
+
+
+def _uuid(value: object) -> str | None:
+    """Return a lowercase uuid, or nothing when the value is not one."""
+    if not isinstance(value, str) or _UUID.fullmatch(value) is None:
+        return None
+    return value.lower()
 
 
 def dispatch_request(room_name: str) -> CreateAgentDispatchRequest:
