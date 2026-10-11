@@ -1,14 +1,4 @@
-"""Streaming speech synthesis through the LiveKit ElevenLabs plugin.
-
-The speaker uses the ElevenLabs key from settings. It does not send text
-through LiveKit Inference, and it does not send the key to the browser.
-
-Numbers are spelled in this process before they are sent. Flash v2.5 does
-not normalize numbers unless the account is Enterprise. This account was
-not verified as Enterprise, so provider normalization stays off.
-Language-specific provider normalization is for Japanese only, so it is
-not sent.
-"""
+"""Build the ElevenLabs speaker used by the voice agent."""
 
 from __future__ import annotations
 
@@ -34,14 +24,7 @@ def create_tts(
     model: str | None = None,
     voice_id: str | None = None,
 ) -> elevenlabs.TTS:
-    """Build a streaming ElevenLabs speaker.
-
-    ``TTS_MODEL`` selects the model. The default is Flash v2.5.
-    ``TTS_VOICE_ID`` selects the voice.
-    ``STT_LOCALE`` selects the language. ``ar-SA`` is sent to ElevenLabs as ``ar``.
-    Phones, prices, dates, and times are spelled before synthesis.
-    ``model`` and ``voice_id`` override the settings for one comparison run.
-    """
+    """Make an ElevenLabs speaker from settings, with numbers spelled first."""
     speaker = elevenlabs.TTS(
         api_key=settings.eleven_api_key.get_secret_value(),
         model=settings.tts_model if model is None else model,
@@ -55,7 +38,7 @@ def create_tts(
 
 
 def _normalize_one_shot(speaker: elevenlabs.TTS) -> None:
-    """Spell numbers on the HTTP synthesis path as well as the stream."""
+    """Spell numbers on the one-shot speak path, not only the live stream."""
     original = speaker.synthesize
 
     def synthesize(
@@ -63,46 +46,58 @@ def _normalize_one_shot(speaker: elevenlabs.TTS) -> None:
         *,
         conn_options: APIConnectOptions = DEFAULT_API_CONNECT_OPTIONS,
     ) -> ChunkedStream:
+        """Spell numbers, then send that text to ElevenLabs once."""
         return original(normalize_for_speech(text), conn_options=conn_options)
 
     speaker.synthesize = synthesize  # type: ignore[assignment]
 
 
 class _SpeechSentences(SentenceTokenizer):
-    """Split into sentences, then spell numbers in each sentence."""
+    """Split speech text into sentences, then spell the numbers in each one."""
 
     def __init__(self) -> None:
+        """Use the built-in sentence splitter."""
         self._inner = blingfire.SentenceTokenizer(min_sentence_len=1)
 
     def tokenize(self, text: str, *, language: str | None = None) -> list[str]:
+        """Return the sentences with phones, prices, dates, and times spelled."""
         return [
             normalize_for_speech(part)
             for part in self._inner.tokenize(text, language=language)
         ]
 
     def stream(self, *, language: str | None = None) -> SentenceStream:
+        """Start a live sentence stream that spells numbers as text arrives."""
         return _SpeechSentenceStream(self._inner.stream(language=language))
 
 
 class _SpeechSentenceStream(SentenceStream):
+    """A live sentence stream that spells numbers before each sentence is spoken."""
+
     def __init__(self, inner: SentenceStream) -> None:
+        """Wrap the built-in sentence stream."""
         super().__init__()
         self._inner = inner
 
     def push_text(self, text: str) -> None:
+        """Add more text to the sentence splitter."""
         self._inner.push_text(text)
 
     def flush(self) -> None:
+        """Finish the current sentence even if it has no ending mark."""
         self._inner.flush()
 
     def end_input(self) -> None:
+        """Tell the splitter that no more text is coming."""
         self._inner.end_input()
 
     async def aclose(self) -> None:
+        """Close the inner stream and this wrapper."""
         await self._inner.aclose()
         self._do_close()
 
     async def __anext__(self) -> TokenData:
+        """Return the next sentence with its numbers spelled."""
         item = await self._inner.__anext__()
         return TokenData(
             token=normalize_for_speech(item.token),
@@ -110,4 +105,5 @@ class _SpeechSentenceStream(SentenceStream):
         )
 
     def __aiter__(self) -> AsyncIterator[TokenData]:
+        """Let callers loop over sentences with ``async for``."""
         return self

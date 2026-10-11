@@ -1,4 +1,4 @@
-"""Runtime settings loaded from the environment and an optional `.env` file."""
+"""Load and check the process settings from the environment."""
 
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ _REDACTED = "***"
 
 
 class SettingsError(Exception):
-    """Raised when required settings are missing or invalid."""
+    """Startup failed because a required setting is missing or invalid."""
 
     def __init__(
         self,
@@ -46,17 +46,14 @@ class SettingsError(Exception):
         missing: tuple[str, ...] = (),
         invalid: tuple[str, ...] = (),
     ) -> None:
+        """Store the message plus the setting names that failed."""
         super().__init__(message)
         self.missing = missing
         self.invalid = invalid
 
 
 class Settings(BaseSettings):
-    """Validated process settings.
-
-    Secret fields stay available through ``get_secret_value()``.
-    ``str``, ``repr``, and ``model_dump()`` show ``***`` instead.
-    """
+    """The checked settings. Printed forms hide secret values."""
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -82,6 +79,7 @@ class Settings(BaseSettings):
     @field_validator(*_SECRET_FIELDS)
     @classmethod
     def secret_must_not_be_blank(cls, value: SecretStr) -> SecretStr:
+        """Reject a secret that is empty or only spaces."""
         if not value.get_secret_value().strip():
             raise ValueError("must not be blank")
         return value
@@ -89,6 +87,7 @@ class Settings(BaseSettings):
     @field_validator("stt_model", "stt_locale", "tts_model", "tts_voice_id")
     @classmethod
     def text_must_not_be_blank(cls, value: str) -> str:
+        """Reject a model, locale, or voice id that is empty or only spaces."""
         stripped = value.strip()
         if not stripped:
             raise ValueError("must not be blank")
@@ -96,19 +95,22 @@ class Settings(BaseSettings):
 
     @field_serializer(*_SECRET_FIELDS)
     def redact_secret(self, _value: SecretStr) -> str:
+        """Replace a secret with *** when settings are printed or dumped."""
         return _REDACTED
 
     def __repr__(self) -> str:
+        """Show every setting, with secrets already replaced by ***."""
         rendered = ", ".join(
             f"{name}={value!r}" for name, value in self.model_dump().items()
         )
         return f"Settings({rendered})"
 
     def __str__(self) -> str:
+        """Show the same hidden-secret text as repr."""
         return repr(self)
 
     def secret_values(self) -> tuple[str, ...]:
-        """Return raw secrets for log redaction. Do not log this value."""
+        """Return the real secret strings so logs can hide them. Do not print this."""
         values = (
             self.livekit_api_key,
             self.livekit_api_secret,
@@ -121,7 +123,7 @@ class Settings(BaseSettings):
 
 
 def load_settings() -> Settings:
-    """Load settings or raise ``SettingsError`` with setting names only."""
+    """Read settings. On failure, raise an error that names the bad settings only."""
     try:
         return Settings()  # type: ignore[call-arg]
     except ValidationError as exc:
@@ -130,6 +132,7 @@ def load_settings() -> Settings:
 
 
 def _settings_error_from(exc: ValidationError) -> SettingsError:
+    """Turn a validation error into a message that lists setting names only."""
     missing: set[str] = set()
     invalid: set[str] = set()
     for error in exc.errors():

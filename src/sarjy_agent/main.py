@@ -1,4 +1,4 @@
-"""Minimal process entry point."""
+"""Start the agent process."""
 
 import sys
 from time import perf_counter
@@ -16,7 +16,7 @@ from sarjy_agent.worker import run_worker
 
 
 def main() -> None:
-    """Start the agent process."""
+    """Load settings, hide secrets in logs, then start the LiveKit worker."""
     configure_logging()
     log_lifecycle("process_starting")
     started = perf_counter()

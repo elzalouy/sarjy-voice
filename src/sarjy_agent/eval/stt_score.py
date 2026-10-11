@@ -1,8 +1,4 @@
-"""Score speech-recognition output against the fixed Arabic corpus.
-
-Every comparison uses ``load_corpus()``. A later model or locale must use
-the same version, the same fingerprint, and the same item ids.
-"""
+"""Score Deepgram text against the fixed Arabic sentences and write the report."""
 
 from __future__ import annotations
 
@@ -27,12 +23,12 @@ _HARAKAT = re.compile(r"[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED]")
 
 
 class CorpusMismatch(Exception):
-    """Raised when two runs do not use the same corpus."""
+    """Two runs cannot be compared because they did not use the same sentences."""
 
 
 @dataclass(frozen=True)
 class ItemScore:
-    """One corpus row after recognition."""
+    """One sentence after recognition: the heard text, the score, and the wait."""
 
     item_id: str
     category: str
@@ -49,7 +45,7 @@ class ItemScore:
 
     @property
     def group(self) -> ErrorGroup:
-        """The report group for this item."""
+        """Return names, numbers, mixed language, dialect, or other."""
         return item_group(
             category=self.category,
             ambiguity_kind=self.ambiguity_kind,
@@ -59,7 +55,7 @@ class ItemScore:
 
 @dataclass(frozen=True)
 class SttBenchmark:
-    """One full run. Item order matches the corpus."""
+    """One full recognition run, in the same order as the fixed sentences."""
 
     corpus_id: str
     corpus_version: str
@@ -73,7 +69,7 @@ class SttBenchmark:
     items: tuple[ItemScore, ...]
 
     def to_dict(self) -> dict[str, object]:
-        """Return JSON-ready data. Spoken text is included. Keys are not."""
+        """Return this run as a dictionary that can be saved as JSON."""
         return {
             "corpus_id": self.corpus_id,
             "corpus_version": self.corpus_version,
@@ -114,7 +110,7 @@ _LATENCY_DEFINITION = (
 
 
 def benchmark_from_dict(raw: object) -> SttBenchmark:
-    """Load a saved benchmark. Reject a file that is not this report shape."""
+    """Read a saved benchmark. Reject a file that is not this report shape."""
     if not isinstance(raw, dict):
         raise CorpusMismatch("Result file is not an object.")
     item_ids = _string_tuple(raw.get("item_ids"), "item_ids")
@@ -145,7 +141,7 @@ def score_item(
     latency_ms: float | None = None,
     error_type: str | None = None,
 ) -> ItemScore:
-    """Compare one hypothesis with the item's expected and accepted writings."""
+    """Score one heard line against the expected text and other accepted writings."""
     compact = _compact(hypothesis)
     matched = _match(item, compact)
     references = (item.expected_transcript, *item.acceptable_transcripts)
@@ -172,11 +168,7 @@ def score_corpus(
     latencies_ms: dict[str, float | None] | None = None,
     error_types: dict[str, str | None] | None = None,
 ) -> tuple[ItemScore, ...]:
-    """Score every corpus item in corpus order.
-
-    A missing hypothesis is an empty result. Callers must pass the corpus
-    from ``load_corpus()`` so the ids and order stay fixed.
-    """
+    """Score every sentence in corpus order. A missing line counts as empty."""
     timings = latencies_ms or {}
     errors = error_types or {}
     return tuple(
@@ -191,7 +183,7 @@ def score_corpus(
 
 
 def item_group(*, category: str, ambiguity_kind: str | None, notes: str) -> ErrorGroup:
-    """Return the report group for one corpus item."""
+    """Choose the report group: names, numbers, mixed language, dialect, or other."""
     if category == "name_place":
         return "names_places"
     if category == "number":
@@ -207,11 +199,7 @@ def compare_benchmarks(
     baseline: SttBenchmark,
     current: SttBenchmark,
 ) -> tuple[str, ...]:
-    """Return item ids whose hypothesis or acceptance changed.
-
-    Both runs must be the same corpus. A different fingerprint or a different
-    item list is rejected.
-    """
+    """Return the item ids whose heard text or pass/fail result changed."""
     if (
         baseline.corpus_fingerprint != current.corpus_fingerprint
         or baseline.item_ids != current.item_ids
@@ -234,7 +222,7 @@ def render_markdown(
     changed_item_ids: tuple[str, ...] | None = None,
     compared_with: str | None = None,
 ) -> str:
-    """Render the benchmark as a short report."""
+    """Write the benchmark as a short markdown report."""
     lines = [
         "# Speech recognition benchmark",
         "",
@@ -293,6 +281,7 @@ def render_markdown(
 
 
 def _settings_table(benchmark: SttBenchmark) -> str:
+    """Build the table of corpus, model, locale, and speaker."""
     first = benchmark.item_ids[0] if benchmark.item_ids else ""
     last = benchmark.item_ids[-1] if benchmark.item_ids else ""
     rows = (
@@ -310,6 +299,7 @@ def _settings_table(benchmark: SttBenchmark) -> str:
 
 
 def _quality_table(benchmark: SttBenchmark) -> str:
+    """Build the accepted-count and average word-error rows."""
     total = len(benchmark.items)
     accepted = sum(1 for item in benchmark.items if item.accepted)
     rate = 0.0 if total == 0 else accepted / total
@@ -322,6 +312,7 @@ def _quality_table(benchmark: SttBenchmark) -> str:
 
 
 def _latency_section(benchmark: SttBenchmark) -> str:
+    """Describe the wait from speech end to the final transcript."""
     values = [
         item.latency_ms for item in benchmark.items if item.latency_ms is not None
     ]
@@ -343,6 +334,7 @@ def _latency_section(benchmark: SttBenchmark) -> str:
 
 
 def _group_section(benchmark: SttBenchmark, group: ErrorGroup) -> str:
+    """List the misses in one report group."""
     rows = [item for item in benchmark.items if item.group == group]
     misses = [item for item in rows if not item.accepted]
     summary = f"{len(misses)} of {len(rows)} missed."
@@ -352,6 +344,7 @@ def _group_section(benchmark: SttBenchmark, group: ErrorGroup) -> str:
 
 
 def _number_section(benchmark: SttBenchmark) -> str:
+    """List phone, price, date, and time misses."""
     rows = [item for item in benchmark.items if item.group == "numbers"]
     misses = [item for item in rows if not item.accepted]
     parts = [f"{len(misses)} of {len(rows)} missed."]
@@ -375,6 +368,7 @@ def _comparison_section(
     *,
     compared_with: str | None = None,
 ) -> str:
+    """Say whether this run matches an earlier run of the same sentences."""
     rule = (
         "A later model or locale must use corpus "
         f"{benchmark.corpus_id} {benchmark.corpus_version}, fingerprint "
@@ -390,6 +384,7 @@ def _comparison_section(
 
 
 def _item_table(benchmark: SttBenchmark) -> str:
+    """Build the table of every sentence and what was heard."""
     rows = tuple(
         (
             item.item_id,
@@ -408,6 +403,7 @@ def _item_table(benchmark: SttBenchmark) -> str:
 
 
 def _miss_table(items: list[ItemScore]) -> str:
+    """Build a table of the expected text and the heard text for misses."""
     rows = tuple(
         (
             item.item_id,
@@ -422,6 +418,7 @@ def _miss_table(items: list[ItemScore]) -> str:
 
 
 def _table(header: tuple[str, ...], rows: tuple[tuple[str, ...], ...]) -> str:
+    """Turn headers and rows into a markdown table."""
     head = "| " + " | ".join(header) + " |"
     rule = "| " + " | ".join("---" for _ in header) + " |"
     body = ["| " + " | ".join(row) + " |" for row in rows]
@@ -429,14 +426,17 @@ def _table(header: tuple[str, ...], rows: tuple[tuple[str, ...], ...]) -> str:
 
 
 def _cell(text: str) -> str:
+    """Make one table cell safe by replacing vertical bars."""
     return text.replace("|", "/")
 
 
 def _compact(text: str) -> str:
+    """Trim the text and collapse repeated spaces."""
     return " ".join(text.split())
 
 
 def _match(item: EvaluationItem, hypothesis: str) -> MatchKind | None:
+    """Return expected or acceptable when the heard text matches, else nothing."""
     if hypothesis == _compact(item.expected_transcript):
         return "expected"
     accepted = {_compact(value) for value in item.acceptable_transcripts}
@@ -446,12 +446,14 @@ def _match(item: EvaluationItem, hypothesis: str) -> MatchKind | None:
 
 
 def _closest_wer(hypothesis: str, references: tuple[str, ...]) -> float:
+    """Return the lowest word error rate against the expected or accepted text."""
     if not references:
         return 0.0 if not _tokens(hypothesis) else 1.0
     return min(_wer(hypothesis, reference) for reference in references)
 
 
 def _wer(hypothesis: str, reference: str) -> float:
+    """Return the word error rate of one heard line against one reference line."""
     hyp = _tokens(hypothesis)
     ref = _tokens(reference)
     if not ref:
@@ -460,11 +462,13 @@ def _wer(hypothesis: str, reference: str) -> float:
 
 
 def _tokens(text: str) -> list[str]:
+    """Split text into words, ignoring punctuation and Arabic vowel marks."""
     stripped = _HARAKAT.sub("", text).replace("\u0640", "")
     return [part for part in _TOKEN.sub(" ", stripped).split() if part]
 
 
 def _distance(left: list[str], right: list[str]) -> int:
+    """Count the word inserts, deletes, and swaps between two word lists."""
     previous = list(range(len(right) + 1))
     for index, token in enumerate(left, start=1):
         current = [index]
@@ -482,6 +486,7 @@ def _distance(left: list[str], right: list[str]) -> int:
 
 
 def _latency(value: float | None) -> float | None:
+    """Keep a zero-or-greater latency, or return nothing when it is missing."""
     if value is None:
         return None
     if isinstance(value, bool) or not math.isfinite(value) or value < 0:
@@ -490,6 +495,7 @@ def _latency(value: float | None) -> float | None:
 
 
 def _item_from_dict(raw: object) -> ItemScore:
+    """Read one saved sentence score, or raise if the shape is wrong."""
     if not isinstance(raw, dict):
         raise CorpusMismatch("Result item is not an object.")
     matched = raw.get("matched")
@@ -528,12 +534,14 @@ def _item_from_dict(raw: object) -> ItemScore:
 
 
 def _text(value: object, field: str) -> str:
+    """Return a required text field, or raise if it is missing."""
     if not isinstance(value, str) or not value:
         raise CorpusMismatch(f"Result file is missing {field}.")
     return value
 
 
 def _optional_text(value: object) -> str | None:
+    """Return optional text, or nothing when the field is empty."""
     if value is None:
         return None
     if not isinstance(value, str):
@@ -542,6 +550,7 @@ def _optional_text(value: object) -> str | None:
 
 
 def _string_tuple(value: object, field: str) -> tuple[str, ...]:
+    """Return a required list of text values, or raise if it is missing."""
     if not isinstance(value, list) or not value:
         raise CorpusMismatch(f"Result file is missing {field}.")
     ids: list[str] = []
@@ -553,6 +562,7 @@ def _string_tuple(value: object, field: str) -> tuple[str, ...]:
 
 
 def _percentile(values: list[float], percent: float) -> float:
+    """Return the nearest-rank percentile of these numbers."""
     ordered = sorted(values)
     rank = math.ceil(percent / 100 * len(ordered)) - 1
     rank = min(max(rank, 0), len(ordered) - 1)

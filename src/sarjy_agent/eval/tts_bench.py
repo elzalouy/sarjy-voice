@@ -1,8 +1,4 @@
-"""Speak the fixed Arabic corpus with two ElevenLabs models.
-
-The audio is not stored. Nova-3 hears each clip and the transcript is
-saved. A person does not score accent or naturalness.
-"""
+"""Speak the fixed sentences with two ElevenLabs models and save the scores."""
 
 from __future__ import annotations
 
@@ -36,7 +32,7 @@ _CHUNK_MS = 20
 
 
 def main() -> None:
-    """Speak the corpus with Flash v2.5 and Multilingual v2."""
+    """Speak the corpus with both models and write the comparison report."""
     settings = load_settings()
     register_secrets(settings.secret_values())
     corpus = load_corpus()
@@ -58,6 +54,7 @@ async def _run(
     stt_model: str,
     stt_locale: str,
 ) -> tuple[TtsRun, TtsRun]:
+    """Speak the corpus with Flash v2.5, then with Multilingual v2."""
     settings = load_settings()
     async with http_context.open():
         flash_speaker = create_tts(settings, model=PRIMARY_MODEL, voice_id=voice_id)
@@ -104,6 +101,7 @@ async def _model_run(
     stt_model: str,
     stt_locale: str,
 ) -> TtsRun:
+    """Speak every sentence with one model and return that model's run."""
     items: list[TtsItem] = []
     for index, item in enumerate(corpus.items, start=1):
         spoken = await _speak_one(speaker, recognizer, item, model, voice_id)
@@ -134,6 +132,7 @@ async def _speak_one(
     model: str,
     voice_id: str,
 ) -> TtsItem:
+    """Speak one sentence, hear it with Deepgram, and return the score."""
     try:
         audio, ttfb_ms = await _synthesize(speaker, item.tts_text)
         hypothesis = await _hear(recognizer, audio)
@@ -157,6 +156,7 @@ async def _speak_one(
 async def _synthesize(
     speaker: elevenlabs.TTS, text: str
 ) -> tuple[rtc.AudioFrame, float]:
+    """Ask ElevenLabs for one clip and return the audio plus time to first sound."""
     started = time.perf_counter()
     first_ms: float | None = None
     frames: list[rtc.AudioFrame] = []
@@ -174,6 +174,7 @@ async def _synthesize(
 
 
 async def _hear(recognizer: deepgram.STT, audio: rtc.AudioFrame) -> str:
+    """Send one clip to Deepgram and return the heard text."""
     stream = recognizer.stream()
     try:
         return await asyncio.wait_for(
@@ -185,9 +186,11 @@ async def _hear(recognizer: deepgram.STT, audio: rtc.AudioFrame) -> str:
 
 
 async def _read(stream: stt.RecognizeStream, audio: rtc.AudioFrame) -> str:
+    """Play one clip into an open Deepgram stream and collect the final text."""
     finals: list[str] = []
 
     async def send() -> None:
+        """Send the clip, then one second of silence."""
         chunk_samples = max(audio.sample_rate * _CHUNK_MS // 1000, 1)
         for chunk in _chunks(audio, chunk_samples):
             stream.push_frame(chunk)
@@ -201,6 +204,7 @@ async def _read(stream: stt.RecognizeStream, audio: rtc.AudioFrame) -> str:
         stream.end_input()
 
     async def receive() -> None:
+        """Keep each non-empty final transcript."""
         async for event in stream:
             if event.type != stt.SpeechEventType.FINAL_TRANSCRIPT:
                 continue
@@ -217,6 +221,7 @@ async def _read(stream: stt.RecognizeStream, audio: rtc.AudioFrame) -> str:
 
 
 def _join(frames: list[rtc.AudioFrame]) -> rtc.AudioFrame:
+    """Glue audio frames into one frame."""
     first = frames[0]
     width = 2 * first.num_channels
     samples = sum(frame.samples_per_channel for frame in frames)
@@ -232,6 +237,7 @@ def _join(frames: list[rtc.AudioFrame]) -> rtc.AudioFrame:
 
 
 def _chunks(frame: rtc.AudioFrame, samples_per_chunk: int) -> list[rtc.AudioFrame]:
+    """Split one audio frame into short pieces."""
     count = max(samples_per_chunk, 1)
     channels = frame.num_channels
     width = 2 * channels
@@ -253,6 +259,7 @@ def _chunks(frame: rtc.AudioFrame, samples_per_chunk: int) -> list[rtc.AudioFram
 
 
 def _join_finals(parts: list[str]) -> str:
+    """Join final pieces into one line without repeating the same words."""
     stable = ""
     for part in parts:
         text = " ".join(part.split())
@@ -266,6 +273,7 @@ def _join_finals(parts: list[str]) -> str:
 
 
 def _write(primary: TtsRun, other: TtsRun) -> None:
+    """Save the comparison report and one report for each model."""
     _REPORT_DIR.mkdir(parents=True, exist_ok=True)
     for run in (primary, other):
         stem = _slug(run.model, run.voice_id)
@@ -283,6 +291,7 @@ def _write(primary: TtsRun, other: TtsRun) -> None:
 
 
 def _slug(model: str, voice_id: str) -> str:
+    """Build a safe file name from the model and voice id."""
     raw = f"{model}_{voice_id}"
     cleaned = "".join(
         char if char.isalnum() or char in "._-" else "-" for char in raw

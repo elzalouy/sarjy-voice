@@ -1,11 +1,4 @@
-"""LiveKit worker, based on the official Agents starter.
-
-The process entry point loads settings, then calls ``run_worker``.
-Dispatch accepts a job only for agent ``sarjy`` and the room on that job.
-Each job loads settings again, because a spawned job process does not share
-the parent settings object. The job recognizes speech with Deepgram and
-speaks with ElevenLabs. This module does not load memory or tools.
-"""
+"""Run the LiveKit worker that hears with Deepgram and speaks with ElevenLabs."""
 
 from __future__ import annotations
 
@@ -44,16 +37,17 @@ _CLASS_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
 
 
 class Assistant(Agent):
-    """Voice agent with no tools and no memory."""
+    """The Sarjy voice agent. It has no tools and no memory."""
 
     def __init__(self) -> None:
+        """Set the short spoken instructions and an empty turn list."""
         super().__init__(instructions=_INSTRUCTIONS)
         self.turns = UserTurns()
 
     async def on_user_turn_completed(
         self, turn_ctx: ChatContext, new_message: ChatMessage
     ) -> None:
-        """Save the finished user turn once. Partial text is not a message."""
+        """Save the finished user turn once, then log its id."""
         del turn_ctx
         text = new_message.text_content or ""
         turn = self.turns.commit(text)
@@ -62,7 +56,7 @@ class Assistant(Agent):
 
 
 def create_server(settings: Settings) -> AgentServer:
-    """Build a worker that uses the validated LiveKit credentials."""
+    """Build the worker that joins rooms as the sarjy agent."""
     server = AgentServer(
         ws_url=_livekit_url(settings),
         api_key=settings.livekit_api_key.get_secret_value(),
@@ -78,11 +72,7 @@ def create_server(settings: Settings) -> AgentServer:
 
 
 async def session_entrypoint(ctx: JobContext) -> None:
-    """Join the dispatched room, then leave on shutdown.
-
-    The session recognizes speech and can speak. A job for another agent, or a
-    room other than the job room, does not connect.
-    """
+    """Join the job's room, run one voice session, and leave on shutdown."""
     configure_logging()
     assigned = bind_session(ctx.job, ctx.room.name)
     if assigned is None:
@@ -92,6 +82,7 @@ async def session_entrypoint(ctx: JobContext) -> None:
     def register_shutdown(
         callback: Callable[[str], Coroutine[None, None, None]],
     ) -> None:
+        """Ask LiveKit to call this function when the job stops."""
         ctx.add_shutdown_callback(callback)
 
     lifecycle = SessionLifecycle(
@@ -105,11 +96,12 @@ async def session_entrypoint(ctx: JobContext) -> None:
 
 
 def create_voice_session(settings: Settings) -> AgentSession[None]:
-    """Build a room session that hears with Deepgram and speaks with ElevenLabs."""
+    """Make one room session with Deepgram hearing and ElevenLabs speech."""
     return AgentSession(stt=create_stt(settings), tts=create_tts(settings))
 
 
 async def _start_voice_session(ctx: JobContext) -> None:
+    """Load settings, watch transcripts, and start the agent in this room."""
     settings = load_settings()
     register_secrets(settings.secret_values())
     agent = Assistant()
@@ -119,12 +111,13 @@ async def _start_voice_session(ctx: JobContext) -> None:
 
 
 def _watch_transcripts(session: AgentSession[None], turns: UserTurns) -> None:
-    """Listen for recognition events before the room starts sending audio."""
+    """Listen for transcripts and recognition errors before audio starts."""
     session.on("user_input_transcribed", lambda event: _on_transcript(turns, event))
     session.on("error", lambda event: _on_error(turns, event))
 
 
 def _on_transcript(turns: UserTurns, event: UserInputTranscribedEvent) -> None:
+    """Pass one Deepgram transcript into the open user turn."""
     turns.observe(
         text=event.transcript,
         is_final=event.is_final,
@@ -133,6 +126,7 @@ def _on_transcript(turns: UserTurns, event: UserInputTranscribedEvent) -> None:
 
 
 def _on_error(turns: UserTurns, event: ErrorEvent) -> None:
+    """Drop a partial line and log a Deepgram failure. Other errors are ignored."""
     error = event.error
     if not isinstance(error, STTError):
         return
@@ -145,6 +139,7 @@ def _on_error(turns: UserTurns, event: ErrorEvent) -> None:
 
 
 def _error_type(exc: BaseException) -> str:
+    """Return a short error class name that is safe to log."""
     name = type(exc).__name__
     if _CLASS_NAME.fullmatch(name):
         return name
@@ -152,14 +147,14 @@ def _error_type(exc: BaseException) -> str:
 
 
 def run_worker(settings: Settings) -> None:
-    """Start the LiveKit worker. With no command, use ``start``."""
+    """Start the worker. Use the start command when none was given."""
     if len(sys.argv) == 1:
         sys.argv.append("start")
     cli.run_app(create_server(settings))
 
 
 def _job_executor_type() -> JobExecutorType:
-    """Use threads in ``dev`` or under a debugger so child processes do not time out."""
+    """Run jobs in threads during dev or debugging, otherwise in processes."""
     if "dev" in sys.argv[1:]:
         return JobExecutorType.THREAD
     if sys.gettrace() is not None or "debugpy" in sys.modules:
@@ -168,6 +163,7 @@ def _job_executor_type() -> JobExecutorType:
 
 
 def _livekit_url(settings: Settings) -> str:
+    """Return the LiveKit websocket URL without a trailing slash."""
     rendered = str(settings.livekit_url)
     if settings.livekit_url.path in ("", "/") and rendered.endswith("/"):
         return rendered[:-1]

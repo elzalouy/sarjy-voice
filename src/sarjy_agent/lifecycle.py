@@ -1,7 +1,4 @@
-"""Join a LiveKit room, watch participants, and leave once.
-
-Speech providers, memory, and tools stay outside this module.
-"""
+"""Join one LiveKit room, watch who enters and leaves, then disconnect once."""
 
 from __future__ import annotations
 
@@ -28,6 +25,8 @@ _CLASS_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
 
 
 class _Participant(Protocol):
+    """The only participant fact this module reads: a short session id."""
+
     @property
     def sid(self) -> str: ...
 
@@ -40,6 +39,8 @@ _RoomEvent = Literal[
 
 
 class _Room(Protocol):
+    """The room events this module needs: join, leave, disconnect, and close."""
+
     def on(self, event: _RoomEvent, callback: Callable[..., object]) -> object: ...
 
     def off(self, event: _RoomEvent, callback: Callable[..., object]) -> None: ...
@@ -53,7 +54,7 @@ class _Room(Protocol):
 
 
 class SessionLifecycle:
-    """One room session. Join and leave each happen at most once."""
+    """One room visit. Connect once, then leave once."""
 
     def __init__(
         self,
@@ -66,6 +67,7 @@ class SessionLifecycle:
         room_id: str | None,
         session_id: str | None,
     ) -> None:
+        """Remember the room, the connect function, and the log ids."""
         self._room = room
         self._connect = connect
         self._add_shutdown_callback = add_shutdown_callback
@@ -78,7 +80,7 @@ class SessionLifecycle:
         self._tasks: set[asyncio.Task[None]] = set()
 
     async def run(self) -> None:
-        """Connect, then return. Shutdown or cancellation leaves the room."""
+        """Connect to the room and log that the session started."""
         self._watch()
         self._add_shutdown_callback(self._on_shutdown)
         try:
@@ -100,7 +102,7 @@ class SessionLifecycle:
                 self._on_joined(participant)
 
     async def leave(self, reason: SessionEndReason) -> None:
-        """Disconnect if needed and log the end of a session that had started."""
+        """Disconnect if still connected, and log the end reason once."""
         if self._closed:
             return
         self._closed = True
@@ -117,25 +119,31 @@ class SessionLifecycle:
                 log_session_ended(reason)
 
     async def _on_shutdown(self, _reason: str) -> None:
+        """Leave the room because the worker is stopping."""
         await self.leave("shutdown")
 
     def _watch(self) -> None:
+        """Start listening for people joining, leaving, and the room closing."""
         self._room.on("participant_connected", self._on_joined)
         self._room.on("participant_disconnected", self._on_left)
         self._room.on("disconnected", self._on_disconnected)
 
     def _unwatch(self) -> None:
+        """Stop listening for room events."""
         self._room.off("participant_connected", self._on_joined)
         self._room.off("participant_disconnected", self._on_left)
         self._room.off("disconnected", self._on_disconnected)
 
     def _on_joined(self, participant: _Participant) -> None:
+        """Log that one remote person joined."""
         self._log_presence("participant_joined", participant)
 
     def _on_left(self, participant: _Participant) -> None:
+        """Log that one remote person left."""
         self._log_presence("participant_left", participant)
 
     def _on_disconnected(self, reason: object) -> None:
+        """Leave after an unexpected drop. A normal close is just shutdown."""
         if self._closed:
             return
         name = _disconnect_name(reason)
@@ -155,6 +163,7 @@ class SessionLifecycle:
         event: Literal["participant_joined", "participant_left"],
         participant: _Participant,
     ) -> None:
+        """Log a join or leave once for this person."""
         sid = public_id(participant.sid)
         key = sid if sid is not None else f"obj:{id(participant)}"
         marker = (event, key)
@@ -169,6 +178,7 @@ class SessionLifecycle:
             log_participant("participant_left", sid)
 
     def _log_failure(self, operation: str, error_type: str) -> None:
+        """Log a LiveKit failure with a short name and no error text."""
         with self._context():
             log_provider_failure(
                 provider="livekit",
@@ -177,17 +187,20 @@ class SessionLifecycle:
             )
 
     def _spawn(self, work: Coroutine[None, None, None]) -> None:
+        """Run the leave work in the background and keep a reference to it."""
         task: asyncio.Task[None] = asyncio.create_task(work)
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
 
     @contextmanager
     def _context(self) -> Iterator[None]:
+        """Attach this room id and session id to logs inside the block."""
         with log_context(room_id=self._room_id, session_id=self._session_id):
             yield
 
 
 def _error_type(exc: BaseException) -> str:
+    """Return a short exception class name, or Error when the name is unsafe."""
     name = type(exc).__name__
     if _CLASS_NAME.fullmatch(name):
         return name
@@ -195,6 +208,7 @@ def _error_type(exc: BaseException) -> str:
 
 
 def _disconnect_name(reason: object) -> str:
+    """Return a short disconnect reason, or UNKNOWN_REASON."""
     if isinstance(reason, str) and _CLASS_NAME.fullmatch(reason):
         return reason
     if isinstance(reason, int):

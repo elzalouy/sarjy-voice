@@ -1,8 +1,4 @@
-"""Streaming speech recognition through the LiveKit Deepgram plugin.
-
-The recognizer uses the Deepgram key from settings. It does not send audio
-through LiveKit Inference.
-"""
+"""Build the Deepgram recognizer used by the voice agent."""
 
 from __future__ import annotations
 
@@ -12,11 +8,7 @@ from sarjy_agent.config import Settings
 
 
 def create_stt(settings: Settings) -> deepgram.STT:
-    """Build a streaming Deepgram recognizer.
-
-    ``STT_MODEL`` selects the model. ``STT_LOCALE`` selects the language.
-    The defaults are Nova-3 and Saudi Arabic ``ar-SA``.
-    """
+    """Make a streaming Deepgram recognizer from the model, locale, and key."""
     return deepgram.STT(
         model=settings.stt_model,
         language=settings.stt_locale,

@@ -1,9 +1,4 @@
-"""Run the fixed Arabic corpus through streaming Deepgram and write a report.
-
-ElevenLabs speaks each item's ``tts_text``. The audio is not stored, and it
-is not user audio. Scores use that same corpus. An earlier result for the
-same corpus stays on disk and is named in the comparison.
-"""
+"""Speak the fixed Arabic sentences, send them to Deepgram, and save the score."""
 
 from __future__ import annotations
 
@@ -40,7 +35,7 @@ _STOP_ON = frozenset({"APIStatusError", "APIConnectionError"})
 
 
 def main() -> None:
-    """Recognize the corpus and write the markdown and JSON reports."""
+    """Run the corpus and write the markdown and JSON reports."""
     settings = load_settings()
     register_secrets(settings.secret_values())
     corpus = load_corpus()
@@ -67,6 +62,7 @@ async def _run(
     tts_model: str,
     tts_voice_id: str,
 ) -> SttBenchmark:
+    """Speak every sentence, recognize it, and return one scored run."""
     settings = load_settings()
     scores: list[ItemScore] = []
     async with http_context.open():
@@ -108,6 +104,7 @@ async def _run(
 
 
 def _audio_note(tts_model: str, tts_voice_id: str) -> str:
+    """Describe who spoke the sentences and that the audio was not saved."""
     return (
         f"ElevenLabs {tts_model} voice {tts_voice_id} spoke each tts_text. "
         "Phones, prices, dates, and times are spelled before synthesis. "
@@ -121,6 +118,7 @@ async def _one(
     recognizer: deepgram.STT,
     item: EvaluationItem,
 ) -> ItemScore:
+    """Speak one sentence, recognize it, and return its score."""
     try:
         audio = await _synthesize(speaker, item.tts_text)
         hypothesis, latency_ms = await _recognize(recognizer, audio)
@@ -133,6 +131,7 @@ async def _one(
 
 
 async def _synthesize(speaker: elevenlabs.TTS, text: str) -> rtc.AudioFrame:
+    """Ask ElevenLabs for one audio clip and return it as a single frame."""
     stream = speaker.synthesize(text)
     try:
         frame = await stream.collect()
@@ -147,6 +146,7 @@ async def _recognize(
     recognizer: deepgram.STT,
     audio: rtc.AudioFrame,
 ) -> tuple[str, float | None]:
+    """Send one clip to Deepgram and return the heard text and the wait."""
     stream = recognizer.stream()
     try:
         return await asyncio.wait_for(
@@ -161,12 +161,14 @@ async def _stream(
     stream: stt.RecognizeStream,
     audio: rtc.AudioFrame,
 ) -> tuple[str, float | None]:
+    """Play the clip in real time and time the wait until the last final text."""
     finals: list[str] = []
     speech_end: float | None = None
     final_at: float | None = None
     chunk_samples = max(audio.sample_rate * _CHUNK_MS // 1000, 1)
 
     async def send() -> None:
+        """Send speech, then one second of silence so the turn can end."""
         nonlocal speech_end
         for chunk in _chunks(audio, chunk_samples):
             stream.push_frame(chunk)
@@ -183,6 +185,7 @@ async def _stream(
         stream.end_input()
 
     async def receive() -> None:
+        """Collect each final transcript and remember when the last one arrived."""
         nonlocal final_at
         async for event in stream:
             if event.type != stt.SpeechEventType.FINAL_TRANSCRIPT:
@@ -206,6 +209,7 @@ async def _stream(
 
 
 def _chunks(frame: rtc.AudioFrame, samples_per_chunk: int) -> list[rtc.AudioFrame]:
+    """Split one audio frame into short pieces that can be sent in real time."""
     count = max(samples_per_chunk, 1)
     channels = frame.num_channels
     width = 2 * channels
@@ -227,6 +231,7 @@ def _chunks(frame: rtc.AudioFrame, samples_per_chunk: int) -> list[rtc.AudioFram
 
 
 def _join_finals(parts: list[str]) -> str:
+    """Join final pieces into one line without repeating the same words."""
     stable = ""
     for part in parts:
         text = " ".join(part.split())
@@ -240,6 +245,7 @@ def _join_finals(parts: list[str]) -> str:
 
 
 def _write(benchmark: SttBenchmark) -> None:
+    """Save the markdown and JSON reports, and name any earlier same-corpus run."""
     _REPORT_DIR.mkdir(parents=True, exist_ok=True)
     stem = _slug(benchmark.stt_model, benchmark.stt_locale, benchmark.tts_model)
     json_path = _REPORT_DIR / f"{stem}.json"
@@ -265,7 +271,7 @@ def _earlier_run(
     benchmark: SttBenchmark,
     json_path: Path,
 ) -> tuple[tuple[str, ...] | None, str | None]:
-    """Compare with another saved run of this same corpus, if one exists."""
+    """Find another saved run of these same sentences and list what changed."""
     for path in sorted(_REPORT_DIR.glob("*.json")):
         if path == json_path:
             continue
@@ -280,6 +286,7 @@ def _earlier_run(
 
 
 def _slug(model: str, locale: str, speaker: str) -> str:
+    """Build a safe file name from the model, locale, and speaker."""
     raw = f"{model}_{locale}_{speaker}"
     cleaned = re.sub(r"[^A-Za-z0-9._-]+", "-", raw).strip("-")
     return cleaned or "stt"

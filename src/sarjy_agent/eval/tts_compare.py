@@ -1,9 +1,4 @@
-"""Compare two ElevenLabs runs on the fixed Arabic corpus.
-
-Latency is the time until the first audio frame. Pronunciation is a Nova-3
-transcript of that audio, scored like the speech-recognition benchmark.
-Naturalness and Saudi accent are not scored here. A person did not listen.
-"""
+"""Compare Flash v2.5 and Multilingual v2 on the same Arabic sentences."""
 
 from __future__ import annotations
 
@@ -20,7 +15,7 @@ _TTFB_LIMIT = 1.25
 
 @dataclass(frozen=True)
 class TtsItem:
-    """One corpus sentence spoken by one model and one voice."""
+    """One spoken sentence: the model, the voice, the wait, and the heard text."""
 
     model: str
     voice_id: str
@@ -29,6 +24,7 @@ class TtsItem:
     score: ItemScore
 
     def to_dict(self) -> dict[str, object]:
+        """Return this sentence as a dictionary that can be saved as JSON."""
         score = self.score
         return {
             "item_id": score.item_id,
@@ -48,7 +44,7 @@ class TtsItem:
 
 @dataclass(frozen=True)
 class TtsRun:
-    """One model and one voice across the whole corpus, in corpus order."""
+    """One model and one voice across every sentence, in corpus order."""
 
     corpus_id: str
     corpus_version: str
@@ -61,6 +57,7 @@ class TtsRun:
     items: tuple[TtsItem, ...]
 
     def to_dict(self) -> dict[str, object]:
+        """Return this run as a dictionary that can be saved as JSON."""
         return {
             "corpus_id": self.corpus_id,
             "corpus_version": self.corpus_version,
@@ -76,24 +73,14 @@ class TtsRun:
 
 @dataclass(frozen=True)
 class Recommendation:
-    """Which model stays the speaker, and why."""
+    """The model that should stay primary, and the measured reason."""
 
     model: str
     reason: str
 
 
 def recommend(primary: TtsRun, other: TtsRun) -> Recommendation:
-    """Keep Flash v2.5 unless Multilingual v2 is clearly better on this run.
-
-    The switch requires three measured facts:
-
-    - Number sentences are accepted more often.
-    - All sentences are accepted at least as often.
-    - Median time to the first audio frame is at most 25% higher.
-
-    Accent and naturalness are not part of the rule. They were not judged
-    by a listener.
-    """
+    """Keep Flash unless the other model is better on numbers and not much slower."""
     _same_corpus(primary, other)
     if primary.model != PRIMARY_MODEL or other.model != COMPARED_MODEL:
         raise CorpusMismatch("Compare Flash v2.5 with Multilingual v2 only.")
@@ -132,7 +119,7 @@ def recommend(primary: TtsRun, other: TtsRun) -> Recommendation:
 
 
 def render_comparison(primary: TtsRun, other: TtsRun) -> str:
-    """Write the comparison report for the two runs."""
+    """Write the side-by-side report for the two models."""
     choice = recommend(primary, other)
     lines = [
         "# Text-to-speech comparison",
@@ -215,7 +202,7 @@ def render_comparison(primary: TtsRun, other: TtsRun) -> str:
 
 
 def render_run(run: TtsRun) -> str:
-    """Write one model's report. Every row names the model and voice."""
+    """Write one model's report. Every row names the model and the voice."""
     lines = [
         f"# Text-to-speech run {run.model}",
         "",
@@ -241,6 +228,7 @@ def render_run(run: TtsRun) -> str:
 
 
 def _same_corpus(primary: TtsRun, other: TtsRun) -> None:
+    """Raise unless both runs used the same sentences in the same order."""
     if (
         primary.corpus_fingerprint != other.corpus_fingerprint
         or primary.corpus_version != other.corpus_version
@@ -255,14 +243,17 @@ def _same_corpus(primary: TtsRun, other: TtsRun) -> None:
 
 
 def _same_voice(primary: TtsRun, other: TtsRun) -> bool:
+    """Return true when both runs used the same non-empty voice id."""
     return bool(primary.voice_id) and primary.voice_id == other.voice_id
 
 
 def _ttfb_values(run: TtsRun) -> list[float]:
+    """Return the measured waits until the first audio frame."""
     return [item.ttfb_ms for item in run.items if item.ttfb_ms is not None]
 
 
 def _accepted_rate(run: TtsRun, *, numbers_only: bool) -> float:
+    """Return the share of sentences whose heard text was accepted."""
     chosen = [
         item
         for item in run.items
@@ -274,16 +265,19 @@ def _accepted_rate(run: TtsRun, *, numbers_only: bool) -> float:
 
 
 def _count(values: list[float]) -> float:
+    """Return how many latency values were measured."""
     return float(len(values))
 
 
 def _median(values: list[float]) -> float | None:
+    """Return the middle latency, or nothing when the list is empty."""
     if not values:
         return None
     return _percentile(values, 50)
 
 
 def _percentile(values: list[float], percent: float) -> float:
+    """Return the nearest-rank percentile of these latencies."""
     ordered = sorted(values)
     rank = math.ceil(percent / 100 * len(ordered)) - 1
     rank = min(max(rank, 0), len(ordered) - 1)
@@ -296,6 +290,7 @@ def _latency_row(
     other: TtsRun,
     summarize: Callable[[list[float]], float | None],
 ) -> str:
+    """Build one latency table row for the two models."""
     return (
         f"| {label} | {_ms(_summarize(primary, summarize))} | "
         f"{_ms(_summarize(other, summarize))} |"
@@ -305,6 +300,7 @@ def _latency_row(
 def _summarize(
     run: TtsRun, summarize: Callable[[list[float]], float | None]
 ) -> float | None:
+    """Apply one summary function to this run's first-audio times."""
     values = _ttfb_values(run)
     if not values:
         return None
@@ -315,6 +311,7 @@ def _summarize(
 
 
 def _ms(value: float | None) -> str:
+    """Format a millisecond value, or n/a when it is missing."""
     if value is None:
         return "n/a"
     if value.is_integer():
@@ -323,6 +320,7 @@ def _ms(value: float | None) -> str:
 
 
 def _rate_row(label: str, primary: TtsRun, other: TtsRun, *, numbers_only: bool) -> str:
+    """Build one accepted-count row for the two models."""
     return (
         f"| {label} | {_rate(primary, numbers_only=numbers_only)} | "
         f"{_rate(other, numbers_only=numbers_only)} |"
@@ -330,12 +328,14 @@ def _rate_row(label: str, primary: TtsRun, other: TtsRun, *, numbers_only: bool)
 
 
 def _mean_wer(run: TtsRun) -> float:
+    """Return the average word error rate for this run."""
     if not run.items:
         return 0.0
     return sum(item.score.wer for item in run.items) / len(run.items)
 
 
 def _rate(run: TtsRun, *, numbers_only: bool) -> str:
+    """Return accepted count over sentence count, as text."""
     chosen = [
         item
         for item in run.items
@@ -348,4 +348,5 @@ def _rate(run: TtsRun, *, numbers_only: bool) -> str:
 
 
 def _cell(text: str) -> str:
+    """Make one table cell safe by replacing vertical bars."""
     return text.replace("|", "\\|")

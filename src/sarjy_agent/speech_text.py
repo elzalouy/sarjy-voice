@@ -1,19 +1,4 @@
-"""Spell ambiguous numbers before ElevenLabs Flash reads them.
-
-Flash v2.5 does not normalize numbers, dates, or prices unless the account
-turns on provider normalization. That switch is for Enterprise plans only.
-``apply_language_text_normalization`` is for Japanese only.
-
-Phones are spoken one digit at a time, including a leading zero. A leading
-``+`` becomes ``زائد``. ``15.50 ريال`` becomes ``خمسة عشر ريال ونص``.
-``49.90 ريال`` after ``بـ`` becomes ``تسعة وأربعين ريال وتسعين هللة``.
-``9 أكتوبر 2026`` becomes ``تسعة أكتوبر ألفين وستة وعشرين``.
-``15 رمضان`` becomes ``خمسة عشر رمضان``. ``3:30`` becomes ``ثلاثة ونص``.
-``8:00`` becomes ``ثمانية``.
-
-Other text is left unchanged. A bare number such as ``iPhone 15`` is not a
-phone, price, date, or time.
-"""
+"""Turn phones, prices, dates, and times into Arabic words before speech."""
 
 from __future__ import annotations
 
@@ -132,7 +117,7 @@ _DATE = re.compile(
 
 
 def normalize_for_speech(text: str) -> str:
-    """Return text whose phones, prices, dates, and times are safe to speak."""
+    """Replace phones, prices, dates, and times in this text with spoken words."""
     spoken = text.translate(_EASTERN_DIGITS)
     spoken = _PHONE.sub(_replace_phone, spoken)
     spoken = _replace_prices(spoken)
@@ -141,25 +126,32 @@ def normalize_for_speech(text: str) -> str:
 
 
 def _replace_phone(match: re.Match[str]) -> str:
+    """Spell the phone number this pattern found."""
     return _spell_phone(match.group(0))
 
 
 def _replace_prices(source: str) -> str:
+    """Spell every riyal price in the text."""
+
     def replace(match: re.Match[str]) -> str:
+        """Spell one price, using the words that fit the text around it."""
         return _spell_price(source, match)
 
     return _PRICE.sub(replace, source)
 
 
 def _replace_time(match: re.Match[str]) -> str:
+    """Spell the clock time this pattern found."""
     return _spell_time(match)
 
 
 def _replace_date(match: re.Match[str]) -> str:
+    """Spell the day, month, and year this pattern found."""
     return _spell_date(match)
 
 
 def _spell_phone(raw: str) -> str:
+    """Say a leading plus as زائد, then one Arabic word per digit."""
     words: list[str] = []
     if raw.startswith("+"):
         words.append("زائد")
@@ -169,6 +161,7 @@ def _spell_phone(raw: str) -> str:
 
 
 def _spell_price(source: str, match: re.Match[str]) -> str:
+    """Say a riyal amount in words, including half and halalas."""
     whole = int(match.group("whole"))
     amount = _cardinal(whole, oblique=_after_bi(source, match.start()))
     if amount is None:
@@ -186,6 +179,7 @@ def _spell_price(source: str, match: re.Match[str]) -> str:
 
 
 def _spell_time(match: re.Match[str]) -> str:
+    """Say an hour, and say ونص for half past."""
     hour = int(match.group("hour"))
     minute = int(match.group("minute"))
     if hour > 23 or minute > 59:
@@ -204,6 +198,7 @@ def _spell_time(match: re.Match[str]) -> str:
 
 
 def _spell_date(match: re.Match[str]) -> str:
+    """Say the day and month, and the year when one is present."""
     day = int(match.group("day"))
     if not 1 <= day <= 31:
         return match.group(0)
@@ -221,11 +216,13 @@ def _spell_date(match: re.Match[str]) -> str:
 
 
 def _after_bi(source: str, start: int) -> bool:
+    """Return true when بـ comes just before this number."""
     prefix = source[max(0, start - 3) : start]
     return prefix.endswith("بـ ") or prefix.endswith("ب ")
 
 
 def _year(value: int) -> str | None:
+    """Say a year from 2000 to 2099, or return nothing if it is outside that range."""
     if not 2000 <= value <= 2099:
         return None
     rest = value - 2000
@@ -238,6 +235,7 @@ def _year(value: int) -> str | None:
 
 
 def _cardinal(value: int, *, oblique: bool) -> str | None:
+    """Say a number from 0 to 99. Oblique is the form used after بـ or و."""
     if not 0 <= value <= 99:
         return None
     if value == 0:

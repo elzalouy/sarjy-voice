@@ -1,4 +1,4 @@
-"""Fixed evaluation sets for speech provider comparisons."""
+"""The fixed Arabic sentences and the helpers that load them."""
 
 from sarjy_agent.eval.corpus import (
     AUDIO_POLICY,

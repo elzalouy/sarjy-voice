@@ -1,12 +1,4 @@
-"""Fixed Saudi Arabic evaluation set.
-
-Version 1 is text only. Do not add real user audio. A later version may add
-audio only when that version records the speaker's permission.
-
-Speech-to-text and text-to-speech comparisons must use ``load_corpus()``.
-They must keep the same version, the same item ids, and this order.
-If the text changes, bump ``version`` and update the fingerprint test.
-"""
+"""Load the fixed Saudi Arabic sentences used for every speech comparison."""
 
 from __future__ import annotations
 
@@ -41,11 +33,11 @@ COMPARISON_RULE: Literal["same_items_for_every_provider"] = (
 
 
 class CorpusError(Exception):
-    """Raised when the evaluation corpus is missing or invalid."""
+    """The evaluation file is missing or does not match the expected shape."""
 
 
 class CorpusCategory(StrEnum):
-    """What an example is meant to exercise."""
+    """The kind of sentence: greeting, name, number, mixed language, or unclear."""
 
     GREETING = "greeting"
     QUESTION_INSTRUCTION = "question_instruction"
@@ -56,7 +48,7 @@ class CorpusCategory(StrEnum):
 
 
 class NumberKind(StrEnum):
-    """Which numeric form a number example uses."""
+    """Which number form a sentence uses: phone, price, date, or time."""
 
     PHONE = "phone"
     PRICE = "price"
@@ -65,7 +57,7 @@ class NumberKind(StrEnum):
 
 
 class AmbiguityKind(StrEnum):
-    """Why an example is hard to score from the words alone."""
+    """Why a sentence is hard: the meaning is unclear, or the speech is unclear."""
 
     MEANING = "meaning"
     UNCLEAR = "unclear"
@@ -82,7 +74,7 @@ _MIN_CATEGORY: dict[CorpusCategory, int] = {
 
 
 class EvaluationItem(BaseModel):
-    """One authored utterance, shared by speech recognition and synthesis."""
+    """One fixed sentence, with the text we expect to hear and the text we speak."""
 
     model_config = ConfigDict(
         extra="forbid",
@@ -102,11 +94,13 @@ class EvaluationItem(BaseModel):
     @field_validator("expected_transcript", "tts_text", "notes")
     @classmethod
     def _single_line_text(cls, value: str) -> str:
+        """Require one non-empty line with no audio file name."""
         return _plain_text(value)
 
     @field_validator("acceptable_transcripts")
     @classmethod
     def _alternatives(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        """Clean other accepted writings and reject duplicates."""
         cleaned = tuple(_plain_text(item) for item in value)
         if len(cleaned) != len(set(cleaned)):
             raise ValueError("alternatives must be unique")
@@ -114,6 +108,7 @@ class EvaluationItem(BaseModel):
 
     @model_validator(mode="after")
     def _check_item(self) -> EvaluationItem:
+        """Require Arabic text and the extra fields that match this category."""
         if not _ARABIC.search(self.expected_transcript):
             raise ValueError("expected_transcript must contain Arabic")
         if not _ARABIC.search(self.tts_text):
@@ -125,7 +120,7 @@ class EvaluationItem(BaseModel):
 
 
 class EvaluationCorpus(BaseModel):
-    """The versioned set used for every provider comparison."""
+    """The full fixed set. Every comparison must use this version and order."""
 
     model_config = ConfigDict(
         extra="forbid",
@@ -145,10 +140,12 @@ class EvaluationCorpus(BaseModel):
     @field_validator("description")
     @classmethod
     def _description_text(cls, value: str) -> str:
+        """Require the description to be one plain line."""
         return _plain_text(value)
 
     @model_validator(mode="after")
     def _check_corpus(self) -> EvaluationCorpus:
+        """Check ids, unique text, and that each group has enough examples."""
         errors: list[str] = []
         _check_ids(self, errors)
         _check_unique_text(self, errors)
@@ -158,7 +155,7 @@ class EvaluationCorpus(BaseModel):
         return self
 
     def fingerprint(self) -> str:
-        """Return a sha256 hex digest of this set's exact text."""
+        """Return a fingerprint of the exact text, so two runs can prove they match."""
         payload = self.model_dump(mode="json")
         encoded = json.dumps(
             payload,
@@ -170,7 +167,7 @@ class EvaluationCorpus(BaseModel):
 
 
 def load_corpus() -> EvaluationCorpus:
-    """Load the versioned Saudi Arabic evaluation set."""
+    """Read the fixed Arabic sentences from the package data file."""
     text = (
         files("sarjy_agent.eval").joinpath(CORPUS_RESOURCE).read_text(encoding="utf-8")
     )
@@ -179,7 +176,7 @@ def load_corpus() -> EvaluationCorpus:
 
 
 def parse_corpus(raw: object) -> EvaluationCorpus:
-    """Validate corpus data and return it."""
+    """Check raw corpus data and return the fixed set."""
     try:
         return EvaluationCorpus.model_validate(raw)
     except ValidationError as exc:
@@ -189,11 +186,7 @@ def parse_corpus(raw: object) -> EvaluationCorpus:
 def stt_references(
     corpus: EvaluationCorpus,
 ) -> tuple[tuple[str, str, tuple[str, ...]], ...]:
-    """Return ``(id, expected transcript, other accepted writings)`` in order.
-
-    A hypothesis is correct when it equals the expected transcript or one
-    accepted writing. Do not require one writing only.
-    """
+    """Return each item id, the expected text, and the other accepted writings."""
     return tuple(
         (item.id, item.expected_transcript, item.acceptable_transcripts)
         for item in corpus.items
@@ -201,11 +194,12 @@ def stt_references(
 
 
 def tts_inputs(corpus: EvaluationCorpus) -> tuple[tuple[str, str], ...]:
-    """Return ``(id, text to synthesize)`` in the same order as speech references."""
+    """Return each item id and the text that should be spoken, in corpus order."""
     return tuple((item.id, item.tts_text) for item in corpus.items)
 
 
 def _plain_text(value: str) -> str:
+    """Return one trimmed line, or raise if it is empty or names an audio file."""
     if value != value.strip() or value == "":
         raise ValueError("must be non-empty text without surrounding space")
     if any(char in value for char in "\n\r\t"):
@@ -216,15 +210,18 @@ def _plain_text(value: str) -> str:
 
 
 def _audio_mentioned(text: str) -> bool:
+    """Return true when the text names an audio file such as .wav."""
     lowered = text.lower()
     return any(suffix in lowered for suffix in _AUDIO_SUFFIXES)
 
 
 def _has_ascii_digit(text: str) -> bool:
+    """Return true when the text contains a Western digit."""
     return any(char.isascii() and char.isdigit() for char in text)
 
 
 def _check_category_fields(item: EvaluationItem) -> None:
+    """Check the extra fields that only some categories are allowed to have."""
     if item.category is CorpusCategory.NUMBER:
         _check_number_item(item)
     else:
@@ -246,6 +243,7 @@ def _check_category_fields(item: EvaluationItem) -> None:
 
 
 def _check_number_item(item: EvaluationItem) -> None:
+    """Require a number item to store both spoken words and a digit writing."""
     if item.number_kind is None:
         raise ValueError("number items require number_kind")
     if item.expected_transcript == item.tts_text:
@@ -263,6 +261,7 @@ def _check_number_item(item: EvaluationItem) -> None:
 
 
 def _check_ids(corpus: EvaluationCorpus, errors: list[str]) -> None:
+    """Require item ids to run from ar-sa-001 with no gaps."""
     ids = [item.id for item in corpus.items]
     expected = [f"ar-sa-{index:03d}" for index in range(1, len(ids) + 1)]
     if ids != expected:
@@ -270,6 +269,7 @@ def _check_ids(corpus: EvaluationCorpus, errors: list[str]) -> None:
 
 
 def _check_unique_text(corpus: EvaluationCorpus, errors: list[str]) -> None:
+    """Require every expected line and every spoken line to be unique."""
     expected = [item.expected_transcript for item in corpus.items]
     spoken = [item.tts_text for item in corpus.items]
     if len(expected) != len(set(expected)):
@@ -279,6 +279,7 @@ def _check_unique_text(corpus: EvaluationCorpus, errors: list[str]) -> None:
 
 
 def _check_coverage(corpus: EvaluationCorpus, errors: list[str]) -> None:
+    """Require enough greetings, names, numbers, mixed lines, and unclear lines."""
     if set(_MIN_CATEGORY) != set(CorpusCategory):
         errors.append("category minimums do not match the category list")
         return
@@ -306,6 +307,7 @@ def _check_coverage(corpus: EvaluationCorpus, errors: list[str]) -> None:
 
 
 def _format_error(exc: ValidationError) -> str:
+    """Turn a validation error into one short message."""
     parts = [
         f"{'.'.join(str(part) for part in error['loc']) or 'corpus'}: {error['msg']}"
         for error in exc.errors()
