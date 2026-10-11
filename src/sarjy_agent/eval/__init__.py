@@ -1,4 +1,4 @@
-"""The fixed Arabic sentences and the helpers that load them."""
+"""Evaluation clips: one wav file and one transcript file per item."""
 
 from sarjy_agent.eval.corpus import (
     AUDIO_POLICY,
@@ -10,7 +10,6 @@ from sarjy_agent.eval.corpus import (
     EvaluationItem,
     NumberKind,
     load_corpus,
-    parse_corpus,
     stt_references,
     tts_inputs,
 )
@@ -25,7 +24,6 @@ __all__ = [
     "EvaluationItem",
     "NumberKind",
     "load_corpus",
-    "parse_corpus",
     "stt_references",
     "tts_inputs",
 ]

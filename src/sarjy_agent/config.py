@@ -73,8 +73,11 @@ class Settings(BaseSettings):
     agent_service_token: SecretStr
     stt_model: str = "nova-3"
     stt_locale: str = "ar-SA"
+    tts_provider: str = "elevenlabs"
     tts_model: str = "eleven_flash_v2_5"
     tts_voice_id: str
+    tts_locale: str = "ar-SA"
+    tts_text_normalization: str = "off"
 
     @field_validator(*_SECRET_FIELDS)
     @classmethod
@@ -84,7 +87,15 @@ class Settings(BaseSettings):
             raise ValueError("must not be blank")
         return value
 
-    @field_validator("stt_model", "stt_locale", "tts_model", "tts_voice_id")
+    @field_validator(
+        "stt_model",
+        "stt_locale",
+        "tts_provider",
+        "tts_model",
+        "tts_voice_id",
+        "tts_locale",
+        "tts_text_normalization",
+    )
     @classmethod
     def text_must_not_be_blank(cls, value: str) -> str:
         """Reject a model, locale, or voice id that is empty or only spaces."""
@@ -92,6 +103,14 @@ class Settings(BaseSettings):
         if not stripped:
             raise ValueError("must not be blank")
         return stripped
+
+    @field_validator("tts_text_normalization")
+    @classmethod
+    def text_normalization_must_be_known(cls, value: str) -> str:
+        """Allow only the ElevenLabs normalization modes."""
+        if value not in {"off", "auto", "on"}:
+            raise ValueError("must be off, auto, or on")
+        return value
 
     @field_serializer(*_SECRET_FIELDS)
     def redact_secret(self, _value: SecretStr) -> str:

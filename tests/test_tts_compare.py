@@ -1,6 +1,11 @@
 import pytest
 
-from sarjy_agent.eval import load_corpus
+from sarjy_agent.eval import (
+    CorpusCategory,
+    EvaluationCorpus,
+    EvaluationItem,
+    NumberKind,
+)
 from sarjy_agent.eval.stt_score import CorpusMismatch, score_item
 from sarjy_agent.eval.tts_compare import (
     COMPARED_MODEL,
@@ -94,7 +99,7 @@ def _run(
     ttfb_ms: float,
     voice_id: str = "voice-test",
 ) -> TtsRun:
-    corpus = load_corpus()
+    corpus = _sample_corpus()
     items = []
     for item in corpus.items:
         hypothesis = item.expected_transcript if accepted else "نص مختلف"
@@ -118,3 +123,17 @@ def _run(
         stt_locale="ar-SA",
         items=tuple(items),
     )
+
+
+def _sample_corpus() -> EvaluationCorpus:
+    greeting = EvaluationItem(id="ar-sa-001", expected_transcript="السلام عليكم")
+    phone = EvaluationItem(
+        id="ar-sa-016",
+        category=CorpusCategory.NUMBER,
+        number_kind=NumberKind.PHONE,
+        expected_transcript="رقمي صفر خمسة خمسة صفر صفر صفر صفر صفر صفر واحد",
+        tts_text="رقمي 0550000001",
+        acceptable_transcripts=("رقمي 0550000001",),
+        notes="digit writing. This phone number is fictional.",
+    )
+    return EvaluationCorpus(items=(greeting, phone))

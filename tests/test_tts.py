@@ -29,7 +29,7 @@ def test_model_voice_and_locale_come_from_settings(
 ) -> None:
     monkeypatch.setenv("TTS_MODEL", "eleven_multilingual_v2")
     monkeypatch.setenv("TTS_VOICE_ID", "voice-custom")
-    monkeypatch.setenv("STT_LOCALE", "ar")
+    monkeypatch.setenv("TTS_LOCALE", "ar")
 
     speaker = create_tts(load_settings())
 
@@ -37,6 +37,31 @@ def test_model_voice_and_locale_come_from_settings(
     assert speaker._opts.voice_id == "voice-custom"
     assert speaker._opts.language == "ar"
     assert speaker._opts.language.language == "ar"
+
+
+def test_a_new_model_reaches_the_session_without_a_new_startup_path(
+    valid_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("TTS_MODEL", "eleven_multilingual_v2")
+
+    async def open_session() -> AgentSession[None]:
+        return create_voice_session(load_settings())
+
+    session = asyncio.run(open_session())
+
+    assert isinstance(session.tts, elevenlabs.TTS)
+    assert session.tts.model == "eleven_multilingual_v2"
+
+
+def test_an_unknown_provider_is_rejected_before_a_session_starts(
+    valid_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from sarjy_agent.tts_config import TtsConfigError
+
+    monkeypatch.setenv("TTS_PROVIDER", "other-vendor")
+
+    with pytest.raises(TtsConfigError, match="other-vendor"):
+        create_tts(load_settings())
 
 
 def test_plugin_uses_the_settings_key_not_a_later_environment_value(

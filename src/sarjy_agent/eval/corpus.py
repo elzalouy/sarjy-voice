@@ -1,13 +1,18 @@
-"""Load the fixed Saudi Arabic sentences used for every speech comparison."""
+"""Load evaluation clips from a folder of ``.wav`` and ``.txt`` pairs.
+
+Each recording has one transcript. ``ar-sa-001.wav`` belongs with
+``ar-sa-001.txt``. The text file is one line: the words that were spoken.
+"""
 
 from __future__ import annotations
 
 import hashlib
-import json
 import re
-from collections import Counter
+import wave
+from collections.abc import Iterable
 from enum import StrEnum
 from importlib.resources import files
+from pathlib import Path
 from typing import Literal
 
 from pydantic import (
@@ -21,23 +26,22 @@ from pydantic import (
 
 _ARABIC = re.compile(r"[\u0600-\u06FF]")
 _LATIN = re.compile(r"[A-Za-z]")
-_AUDIO_SUFFIXES = (".wav", ".mp3", ".flac", ".ogg", ".m4a", ".aac", ".opus")
-_MIN_NUMBER_KIND = 2
-_MIN_AMBIGUITY_KIND = 2
+_STEM = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$")
 
-CORPUS_RESOURCE = "data/ar_sa_v1.json"
-AUDIO_POLICY: Literal["text_only_no_user_audio"] = "text_only_no_user_audio"
+DATA_DIR = "data"
+AUDIO_POLICY: Literal["wav_with_transcript"] = "wav_with_transcript"
 COMPARISON_RULE: Literal["same_items_for_every_provider"] = (
     "same_items_for_every_provider"
 )
+CORPUS_VERSION = "2.0.0"
 
 
 class CorpusError(Exception):
-    """The evaluation file is missing or does not match the expected shape."""
+    """The evaluation folder is missing a clip or a transcript."""
 
 
 class CorpusCategory(StrEnum):
-    """The kind of sentence: greeting, name, number, mixed language, or unclear."""
+    """The kind of sentence, when a test or report needs a group."""
 
     GREETING = "greeting"
     QUESTION_INSTRUCTION = "question_instruction"
@@ -45,6 +49,7 @@ class CorpusCategory(StrEnum):
     NUMBER = "number"
     MIXED_LANGUAGE = "mixed_language"
     AMBIGUOUS = "ambiguous"
+    RECORDED = "recorded"
 
 
 class NumberKind(StrEnum):
@@ -63,38 +68,33 @@ class AmbiguityKind(StrEnum):
     UNCLEAR = "unclear"
 
 
-_MIN_CATEGORY: dict[CorpusCategory, int] = {
-    CorpusCategory.GREETING: 4,
-    CorpusCategory.QUESTION_INSTRUCTION: 4,
-    CorpusCategory.NAME_PLACE: 4,
-    CorpusCategory.NUMBER: 8,
-    CorpusCategory.MIXED_LANGUAGE: 4,
-    CorpusCategory.AMBIGUOUS: 6,
-}
-
-
 class EvaluationItem(BaseModel):
-    """One fixed sentence, with the text we expect to hear and the text we speak."""
+    """One clip. The transcript is the text in the matching ``.txt`` file."""
 
     model_config = ConfigDict(
         extra="forbid",
         frozen=True,
         hide_input_in_errors=True,
+        arbitrary_types_allowed=True,
     )
 
-    id: str = Field(pattern=r"^ar-sa-\d{3}$")
-    category: CorpusCategory
+    id: str = Field(pattern=_STEM.pattern)
+    category: CorpusCategory = CorpusCategory.RECORDED
     number_kind: NumberKind | None = None
     ambiguity_kind: AmbiguityKind | None = None
     expected_transcript: str
-    tts_text: str
+    tts_text: str = ""
     acceptable_transcripts: tuple[str, ...] = ()
-    notes: str
+    notes: str = "Recorded clip."
+    audio_path: Path = Field(default_factory=Path)
+    audio_sha256: str = ""
 
     @field_validator("expected_transcript", "tts_text", "notes")
     @classmethod
     def _single_line_text(cls, value: str) -> str:
-        """Require one non-empty line with no audio file name."""
+        """Require one non-empty line."""
+        if value == "":
+            return value
         return _plain_text(value)
 
     @field_validator("acceptable_transcripts")
@@ -106,9 +106,19 @@ class EvaluationItem(BaseModel):
             raise ValueError("alternatives must be unique")
         return cleaned
 
+    @model_validator(mode="before")
+    @classmethod
+    def _copy_transcript(cls, value: object) -> object:
+        """Use the transcript as the spoken text when no other text is given."""
+        if isinstance(value, dict) and not value.get("tts_text"):
+            copied = dict(value)
+            copied["tts_text"] = copied.get("expected_transcript", "")
+            return copied
+        return value
+
     @model_validator(mode="after")
     def _check_item(self) -> EvaluationItem:
-        """Require Arabic text and the extra fields that match this category."""
+        """Check fields that belong to this category."""
         if not _ARABIC.search(self.expected_transcript):
             raise ValueError("expected_transcript must contain Arabic")
         if not _ARABIC.search(self.tts_text):
@@ -120,67 +130,65 @@ class EvaluationItem(BaseModel):
 
 
 class EvaluationCorpus(BaseModel):
-    """The full fixed set. Every comparison must use this version and order."""
+    """The clips in one folder, in filename order."""
 
     model_config = ConfigDict(
         extra="forbid",
         frozen=True,
         hide_input_in_errors=True,
+        arbitrary_types_allowed=True,
     )
 
-    schema_version: Literal[1]
-    id: Literal["ar-sa"]
-    version: str = Field(pattern=r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
-    locale: Literal["ar-SA"]
-    audio_policy: Literal["text_only_no_user_audio"]
-    comparison_rule: Literal["same_items_for_every_provider"]
-    description: str
+    schema_version: Literal[1] = 1
+    id: Literal["ar-sa"] = "ar-sa"
+    version: str = CORPUS_VERSION
+    locale: Literal["ar-SA"] = "ar-SA"
+    audio_policy: Literal["wav_with_transcript"] = AUDIO_POLICY
+    comparison_rule: Literal["same_items_for_every_provider"] = COMPARISON_RULE
+    description: str = "Wav clips with one transcript each."
+    directory: Path = Path()
     items: tuple[EvaluationItem, ...]
-
-    @field_validator("description")
-    @classmethod
-    def _description_text(cls, value: str) -> str:
-        """Require the description to be one plain line."""
-        return _plain_text(value)
 
     @model_validator(mode="after")
     def _check_corpus(self) -> EvaluationCorpus:
-        """Check ids, unique text, and that each group has enough examples."""
-        errors: list[str] = []
-        _check_ids(self, errors)
-        _check_unique_text(self, errors)
-        _check_coverage(self, errors)
-        if errors:
-            raise ValueError("; ".join(errors))
+        """Require at least one clip and unique ids and transcripts."""
+        if not self.items:
+            raise ValueError("the folder has no wav and txt pairs")
+        ids = [item.id for item in self.items]
+        if ids != sorted(ids):
+            raise ValueError("items must be in filename order")
+        if len(ids) != len(set(ids)):
+            raise ValueError("item ids must be unique")
+        transcripts = [item.expected_transcript for item in self.items]
+        if len(transcripts) != len(set(transcripts)):
+            raise ValueError("transcripts must be unique")
         return self
 
     def fingerprint(self) -> str:
-        """Return a fingerprint of the exact text, so two runs can prove they match."""
-        payload = self.model_dump(mode="json")
-        encoded = json.dumps(
-            payload,
-            ensure_ascii=False,
-            separators=(",", ":"),
-            sort_keys=True,
-        )
-        return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+        """Hash the transcripts and the wav bytes, in item order."""
+        lines = [
+            f"{item.id}\n{item.expected_transcript}\n{item.audio_sha256}"
+            for item in self.items
+        ]
+        payload = "\n".join(lines).encode("utf-8")
+        return hashlib.sha256(payload).hexdigest()
 
 
-def load_corpus() -> EvaluationCorpus:
-    """Read the fixed Arabic sentences from the package data file."""
-    text = (
-        files("sarjy_agent.eval").joinpath(CORPUS_RESOURCE).read_text(encoding="utf-8")
-    )
-    raw: object = json.loads(text)
-    return parse_corpus(raw)
+def load_corpus(directory: Path | None = None) -> EvaluationCorpus:
+    """Load every ``.wav`` that has a ``.txt`` file with the same name.
 
-
-def parse_corpus(raw: object) -> EvaluationCorpus:
-    """Check raw corpus data and return the fixed set."""
+    With no directory, read ``sarjy_agent/eval/data``. A wav with no txt,
+    or a txt with no wav, is an error. Other files in that folder are an error.
+    """
+    root = _data_directory() if directory is None else directory
+    if not root.is_dir():
+        raise CorpusError("The evaluation data folder is missing.")
     try:
-        return EvaluationCorpus.model_validate(raw)
+        return _corpus_from_pairs(root, _pairs(root))
     except ValidationError as exc:
         raise CorpusError(_format_error(exc)) from None
+    except ValueError as exc:
+        raise CorpusError(f"Evaluation corpus is invalid. {exc}") from None
 
 
 def stt_references(
@@ -198,37 +206,107 @@ def tts_inputs(corpus: EvaluationCorpus) -> tuple[tuple[str, str], ...]:
     return tuple((item.id, item.tts_text) for item in corpus.items)
 
 
+def _data_directory() -> Path:
+    resource = files("sarjy_agent.eval").joinpath(DATA_DIR)
+    if not resource.is_dir():
+        raise CorpusError("The evaluation data folder is missing.")
+    return Path(str(resource))
+
+
+def _pairs(directory: Path) -> list[tuple[str, Path, Path]]:
+    wavs: dict[str, Path] = {}
+    texts: dict[str, Path] = {}
+    for path in directory.iterdir():
+        if not path.is_file():
+            continue
+        suffix = path.suffix.lower()
+        if suffix == ".wav":
+            wavs[path.stem] = path
+        elif suffix == ".txt":
+            texts[path.stem] = path
+        else:
+            raise CorpusError(f"{path.name} is not a wav or txt file.")
+    missing_text = sorted(set(wavs) - set(texts))
+    missing_audio = sorted(set(texts) - set(wavs))
+    if missing_text:
+        names = ", ".join(f"{stem}.txt" for stem in missing_text)
+        raise CorpusError(f"Missing transcript files: {names}.")
+    if missing_audio:
+        names = ", ".join(f"{stem}.wav" for stem in missing_audio)
+        raise CorpusError(f"Missing wav files: {names}.")
+    if not wavs:
+        raise CorpusError("The evaluation data folder has no wav and txt pairs.")
+    return [(stem, wavs[stem], texts[stem]) for stem in sorted(wavs)]
+
+
+def _corpus_from_pairs(
+    directory: Path,
+    pairs: Iterable[tuple[str, Path, Path]],
+) -> EvaluationCorpus:
+    items: list[EvaluationItem] = []
+    for stem, wav_path, text_path in pairs:
+        if _STEM.fullmatch(stem) is None:
+            raise CorpusError(f"{stem} is not a safe file name.")
+        _check_wav(wav_path)
+        transcript = _read_transcript(text_path)
+        items.append(
+            EvaluationItem(
+                id=stem,
+                expected_transcript=transcript,
+                tts_text=transcript,
+                audio_path=wav_path,
+                audio_sha256=hashlib.sha256(wav_path.read_bytes()).hexdigest(),
+            )
+        )
+    return EvaluationCorpus(directory=directory, items=tuple(items))
+
+
+def _check_wav(path: Path) -> None:
+    try:
+        with wave.open(str(path), "rb") as audio:
+            channels = audio.getnchannels()
+            width = audio.getsampwidth()
+            rate = audio.getframerate()
+            frames = audio.getnframes()
+    except (wave.Error, EOFError):
+        raise CorpusError(f"{path.name} is not a PCM wav file.") from None
+    if channels != 1 or width != 2 or rate <= 0 or frames <= 0:
+        raise CorpusError(f"{path.name} must be mono 16-bit PCM with audio in it.")
+
+
+def _read_transcript(path: Path) -> str:
+    text = path.read_text(encoding="utf-8")
+    if text.endswith("\n"):
+        text = text[:-1]
+    if text.endswith("\r"):
+        text = text[:-1]
+    try:
+        text = _plain_text(text)
+    except ValueError as exc:
+        raise CorpusError(f"{path.name} {exc}") from None
+    if not _ARABIC.search(text):
+        raise CorpusError(f"{path.name} must contain Arabic.")
+    return text
+
+
 def _plain_text(value: str) -> str:
-    """Return one trimmed line, or raise if it is empty or names an audio file."""
+    """Return one trimmed line, or raise if it is empty."""
     if value != value.strip() or value == "":
         raise ValueError("must be non-empty text without surrounding space")
     if any(char in value for char in "\n\r\t"):
         raise ValueError("must be a single line")
-    if _audio_mentioned(value):
-        raise ValueError("audio files are not part of this corpus")
     return value
-
-
-def _audio_mentioned(text: str) -> bool:
-    """Return true when the text names an audio file such as .wav."""
-    lowered = text.lower()
-    return any(suffix in lowered for suffix in _AUDIO_SUFFIXES)
-
-
-def _has_ascii_digit(text: str) -> bool:
-    """Return true when the text contains a Western digit."""
-    return any(char.isascii() and char.isdigit() for char in text)
 
 
 def _check_category_fields(item: EvaluationItem) -> None:
     """Check the extra fields that only some categories are allowed to have."""
     if item.category is CorpusCategory.NUMBER:
         _check_number_item(item)
-    else:
-        if item.number_kind is not None:
-            raise ValueError("number_kind is only valid on number items")
-        if item.expected_transcript != item.tts_text:
-            raise ValueError("expected_transcript and tts_text must match")
+        return
+    if item.number_kind is not None:
+        raise ValueError("number_kind is only valid on number items")
+    if item.expected_transcript != item.tts_text:
+        raise ValueError("expected_transcript and tts_text must match")
     if item.category is CorpusCategory.AMBIGUOUS:
         if item.ambiguity_kind is None:
             raise ValueError("ambiguous items require ambiguity_kind")
@@ -248,9 +326,9 @@ def _check_number_item(item: EvaluationItem) -> None:
         raise ValueError("number items require number_kind")
     if item.expected_transcript == item.tts_text:
         raise ValueError("number items must record spoken text and digit text")
-    if not _has_ascii_digit(item.tts_text):
+    if not any(char.isascii() and char.isdigit() for char in item.tts_text):
         raise ValueError("tts_text must contain digits")
-    if _has_ascii_digit(item.expected_transcript):
+    if any(char.isascii() and char.isdigit() for char in item.expected_transcript):
         raise ValueError("expected_transcript must spell numbers in words")
     if item.tts_text not in item.acceptable_transcripts:
         raise ValueError("tts_text must be an acceptable transcript")
@@ -258,52 +336,6 @@ def _check_number_item(item: EvaluationItem) -> None:
         raise ValueError("notes must explain the digit writing")
     if item.number_kind is NumberKind.PHONE and "fictional" not in item.notes.lower():
         raise ValueError("phone notes must say the number is fictional")
-
-
-def _check_ids(corpus: EvaluationCorpus, errors: list[str]) -> None:
-    """Require item ids to run from ar-sa-001 with no gaps."""
-    ids = [item.id for item in corpus.items]
-    expected = [f"ar-sa-{index:03d}" for index in range(1, len(ids) + 1)]
-    if ids != expected:
-        errors.append("item ids must run from ar-sa-001 in order without gaps")
-
-
-def _check_unique_text(corpus: EvaluationCorpus, errors: list[str]) -> None:
-    """Require every expected line and every spoken line to be unique."""
-    expected = [item.expected_transcript for item in corpus.items]
-    spoken = [item.tts_text for item in corpus.items]
-    if len(expected) != len(set(expected)):
-        errors.append("expected_transcript values must be unique")
-    if len(spoken) != len(set(spoken)):
-        errors.append("tts_text values must be unique")
-
-
-def _check_coverage(corpus: EvaluationCorpus, errors: list[str]) -> None:
-    """Require enough greetings, names, numbers, mixed lines, and unclear lines."""
-    if set(_MIN_CATEGORY) != set(CorpusCategory):
-        errors.append("category minimums do not match the category list")
-        return
-    counts = Counter(item.category for item in corpus.items)
-    for category, minimum in _MIN_CATEGORY.items():
-        if counts[category] < minimum:
-            errors.append(f"category {category.value} needs at least {minimum} items")
-    kind_counts = Counter(
-        item.number_kind for item in corpus.items if item.number_kind is not None
-    )
-    for kind in NumberKind:
-        if kind_counts[kind] < _MIN_NUMBER_KIND:
-            errors.append(
-                f"number kind {kind.value} needs at least {_MIN_NUMBER_KIND} items"
-            )
-    ambiguity_counts = Counter(
-        item.ambiguity_kind for item in corpus.items if item.ambiguity_kind is not None
-    )
-    for ambiguity in AmbiguityKind:
-        if ambiguity_counts[ambiguity] < _MIN_AMBIGUITY_KIND:
-            errors.append(
-                f"ambiguity kind {ambiguity.value} needs at least "
-                f"{_MIN_AMBIGUITY_KIND} items"
-            )
 
 
 def _format_error(exc: ValidationError) -> str:

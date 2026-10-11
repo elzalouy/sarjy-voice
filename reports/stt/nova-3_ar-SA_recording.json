@@ -1,0 +1,90 @@
+{
+  "corpus_id": "ar-sa",
+  "corpus_version": "2.0.0",
+  "corpus_fingerprint": "1267eb0a8565be6684f818f9f0e590cab9cd007263feaa8696db1f783d28cdaa",
+  "item_ids": [
+    "000098_2-0010",
+    "000098_2-0011",
+    "000098_2-0012",
+    "000098_2-0013",
+    "000098_2-0014"
+  ],
+  "stt_model": "nova-3",
+  "stt_locale": "ar-SA",
+  "tts_model": "recording",
+  "tts_voice_id": "wav",
+  "audio": "5 wav files from /Volumes/work/sarj/sarjy-voice/src/sarjy_agent/eval/data. The txt file with the same name is the expected transcript. A digit writing in the corpus is still accepted.",
+  "latency_definition": "Milliseconds from the last speech sample sent to the streaming recognizer until the last final transcript. Trailing silence used to end the utterance is not part of the speech. If no final transcript arrives, latency is not available.",
+  "items": [
+    {
+      "id": "000098_2-0010",
+      "category": "recorded",
+      "number_kind": null,
+      "ambiguity_kind": null,
+      "notes": "Recorded clip.",
+      "expected_transcript": "اليهودية، والمسحية، والهندوسية اللي ما عمرنا شفنا حد منهم ينتقدها او يتكلم عنها اصلا، الرمي كله للأسلام شفتوا الدليل،",
+      "hypothesis": "اليهوديه والمسيحيه والهندوسيه اللي مع عمرنا شفنا احد منهم ينتقدها ويتكلم عنها اصلا الرامي كله للإسلام شفتو الدليل",
+      "accepted": false,
+      "matched": null,
+      "wer": 0.5263157894736842,
+      "latency_ms": 358.1,
+      "error_type": null
+    },
+    {
+      "id": "000098_2-0011",
+      "category": "recorded",
+      "number_kind": null,
+      "ambiguity_kind": null,
+      "notes": "Recorded clip.",
+      "expected_transcript": "يعني شفتوه انتم وسمعتوه، المذيعة تقول بما في ذلك النص القرآني رمي للأسلام، راحت تقول له طبعا،",
+      "hypothesis": "شفتوه أنتم وسمعتوه المذيع تقول في ذلك النص القراني الرمي للاسلام تقول طبعا",
+      "accepted": false,
+      "matched": null,
+      "wer": 0.5294117647058824,
+      "latency_ms": 291.8,
+      "error_type": null
+    },
+    {
+      "id": "000098_2-0012",
+      "category": "recorded",
+      "number_kind": null,
+      "ambiguity_kind": null,
+      "notes": "Recorded clip.",
+      "expected_transcript": "طبعا، احكي شلون تغى تجدد الخطاب الديني؟ وش، تبغى تجدد الخطاب الديني، تبي تغير نصوص القرآن،",
+      "hypothesis": "طبع طبع شلون تبغى تجدد الخطاب الديني تغير نصوص القرآن",
+      "accepted": false,
+      "matched": null,
+      "wer": 0.5,
+      "latency_ms": 431.8,
+      "error_type": null
+    },
+    {
+      "id": "000098_2-0013",
+      "category": "recorded",
+      "number_kind": null,
+      "ambiguity_kind": null,
+      "notes": "Recorded clip.",
+      "expected_transcript": "اكتشفت شئ يعني والعياذ بالله ما كان يعرفه النبي عليه الصلاة والسلام،",
+      "hypothesis": "اكتشفت شي والعياذ بالله ما كان يعرفه النبي عليه الصلاه والسلام",
+      "accepted": false,
+      "matched": null,
+      "wer": 0.25,
+      "latency_ms": 601.1,
+      "error_type": null
+    },
+    {
+      "id": "000098_2-0014",
+      "category": "recorded",
+      "number_kind": null,
+      "ambiguity_kind": null,
+      "notes": "Recorded clip.",
+      "expected_transcript": "ما ابغى اقول اكثر من كذا صراحة ما اقدر حتى أقولها كا كمثال وإلا كنكتة،",
+      "hypothesis": "ما ابغى اقول اكبر من كذا بصراحه ما اقدر حتى اقولها كمثال ولا نكته",
+      "accepted": false,
+      "matched": null,
+      "wer": 0.4,
+      "latency_ms": 329.5,
+      "error_type": null
+    }
+  ]
+}

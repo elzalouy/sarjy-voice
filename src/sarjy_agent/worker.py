@@ -96,7 +96,7 @@ async def session_entrypoint(ctx: JobContext) -> None:
 
 
 def create_voice_session(settings: Settings) -> AgentSession[None]:
-    """Make one room session with Deepgram hearing and ElevenLabs speech."""
+    """Make one room session. Hearing and speech come from the current settings."""
     return AgentSession(stt=create_stt(settings), tts=create_tts(settings))
 
 

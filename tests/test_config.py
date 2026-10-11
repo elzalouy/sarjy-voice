@@ -58,8 +58,11 @@ def test_valid_settings_keep_speech_defaults(valid_env: None) -> None:
     assert settings.livekit_url.host == "example.livekit.cloud"
     assert settings.stt_model == "nova-3"
     assert settings.stt_locale == "ar-SA"
+    assert settings.tts_provider == "elevenlabs"
     assert settings.tts_model == "eleven_flash_v2_5"
     assert settings.tts_voice_id == "voice-test"
+    assert settings.tts_locale == "ar-SA"
+    assert settings.tts_text_normalization == "off"
     assert settings.livekit_api_key.get_secret_value() == VALID_ENV["LIVEKIT_API_KEY"]
 
 

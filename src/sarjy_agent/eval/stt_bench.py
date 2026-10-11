@@ -1,4 +1,4 @@
-"""Speak the fixed Arabic sentences, send them to Deepgram, and save the score."""
+"""Send each evaluation wav to Deepgram and save the score."""
 
 from __future__ import annotations
 
@@ -6,12 +6,13 @@ import asyncio
 import json
 import re
 import time
+import wave
 from pathlib import Path
 
 from livekit import rtc
 from livekit.agents import stt
 from livekit.agents.utils import http_context
-from livekit.plugins import deepgram, elevenlabs
+from livekit.plugins import deepgram
 
 from sarjy_agent.config import load_settings
 from sarjy_agent.eval.corpus import EvaluationCorpus, EvaluationItem, load_corpus
@@ -26,7 +27,6 @@ from sarjy_agent.eval.stt_score import (
 )
 from sarjy_agent.log import register_secrets
 from sarjy_agent.stt import create_stt
-from sarjy_agent.tts import create_tts
 
 _REPORT_DIR = Path("reports/stt")
 _SILENCE_S = 1.0
@@ -45,8 +45,6 @@ def main() -> None:
                 corpus,
                 stt_model=settings.stt_model,
                 stt_locale=settings.stt_locale,
-                tts_model=settings.tts_model,
-                tts_voice_id=settings.tts_voice_id,
             )
         )
     except RuntimeError as exc:
@@ -59,18 +57,15 @@ async def _run(
     *,
     stt_model: str,
     stt_locale: str,
-    tts_model: str,
-    tts_voice_id: str,
 ) -> SttBenchmark:
-    """Speak every sentence, recognize it, and return one scored run."""
+    """Recognize every wav and return one scored run."""
     settings = load_settings()
     scores: list[ItemScore] = []
     async with http_context.open():
-        speaker = create_tts(settings)
         recognizer = create_stt(settings)
         try:
             for index, item in enumerate(corpus.items, start=1):
-                score = await _one(speaker, recognizer, item)
+                score = await _one(recognizer, item)
                 if index == 1 and score.error_type in _STOP_ON:
                     raise RuntimeError(
                         f"The first item failed with {score.error_type}. "
@@ -87,7 +82,6 @@ async def _run(
                     flush=True,
                 )
         finally:
-            await speaker.aclose()
             await recognizer.aclose()
     return SttBenchmark(
         corpus_id=corpus.id,
@@ -96,31 +90,30 @@ async def _run(
         item_ids=tuple(item.id for item in corpus.items),
         stt_model=stt_model,
         stt_locale=stt_locale,
-        tts_model=tts_model,
-        tts_voice_id=tts_voice_id,
-        audio_note=_audio_note(tts_model, tts_voice_id),
+        tts_model="recording",
+        tts_voice_id="wav",
+        audio_note=_audio_note(corpus),
         items=tuple(scores),
     )
 
 
-def _audio_note(tts_model: str, tts_voice_id: str) -> str:
-    """Describe who spoke the sentences and that the audio was not saved."""
+def _audio_note(corpus: EvaluationCorpus) -> str:
+    """Describe the wav files that were sent to the recognizer."""
     return (
-        f"ElevenLabs {tts_model} voice {tts_voice_id} spoke each tts_text. "
-        "Phones, prices, dates, and times are spelled before synthesis. "
-        "The audio is not stored and is not user audio. "
+        f"{len(corpus.items)} wav files from {corpus.directory}. "
+        "The txt file with the same name is the expected transcript. "
         "A digit writing in the corpus is still accepted."
     )
 
 
 async def _one(
-    speaker: elevenlabs.TTS,
     recognizer: deepgram.STT,
     item: EvaluationItem,
 ) -> ItemScore:
-    """Speak one sentence, recognize it, and return its score."""
+    """Read one wav, recognize it, and return its score."""
     try:
-        audio = await _synthesize(speaker, item.tts_text)
+        audio = _read_wav(item.audio_path)
+        recognizer.update_options(sample_rate=audio.sample_rate)
         hypothesis, latency_ms = await _recognize(recognizer, audio)
     except ExceptionGroup as exc:
         inner = exc.exceptions[0] if exc.exceptions else exc
@@ -130,15 +123,17 @@ async def _one(
     return score_item(item, hypothesis, latency_ms=latency_ms)
 
 
-async def _synthesize(speaker: elevenlabs.TTS, text: str) -> rtc.AudioFrame:
-    """Ask ElevenLabs for one audio clip and return it as a single frame."""
-    stream = speaker.synthesize(text)
-    try:
-        frame = await stream.collect()
-    finally:
-        await stream.aclose()
-    if frame.samples_per_channel <= 0:
+def _read_wav(path: Path) -> rtc.AudioFrame:
+    """Read one mono 16-bit wav into a frame."""
+    with wave.open(str(path), "rb") as audio:
+        channels = audio.getnchannels()
+        width = audio.getsampwidth()
+        rate = audio.getframerate()
+        pcm = audio.readframes(audio.getnframes())
+    if channels != 1 or width != 2 or not pcm:
         raise RuntimeError("EmptyAudio")
+    frame = rtc.AudioFrame.create(rate, channels, len(pcm) // width)
+    memoryview(frame.data).cast("B")[: len(pcm)] = pcm
     return frame
 
 

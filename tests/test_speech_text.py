@@ -2,26 +2,38 @@ import pytest
 from livekit.agents.utils import is_given
 
 from sarjy_agent.config import load_settings
-from sarjy_agent.eval import CorpusCategory, load_corpus
 from sarjy_agent.speech_text import normalize_for_speech
 from sarjy_agent.tts import create_tts
 
+_NUMBER_PAIRS = (
+    ("رقمي 0550000001", "رقمي صفر خمسة خمسة صفر صفر صفر صفر صفر صفر واحد"),
+    (
+        "كلمني على +966500000002",
+        "كلمني على زائد تسعة ستة ستة خمسة صفر صفر صفر صفر صفر صفر صفر اثنين",
+    ),
+    ("الشحن بـ 15.50 ريال", "الشحن بـ خمسة عشر ريال ونص"),
+    ("الباقة بـ 49.90 ريال", "الباقة بـ تسعة وأربعين ريال وتسعين هللة"),
+    (
+        "الموعد يوم الجمعة 9 أكتوبر 2026",
+        "الموعد يوم الجمعة تسعة أكتوبر ألفين وستة وعشرين",
+    ),
+    ("الإجازة تبدأ 15 رمضان", "الإجازة تبدأ خمسة عشر رمضان"),
+    ("تعال الساعة 3:30 العصر", "تعال الساعة ثلاثة ونص العصر"),
+    ("الاجتماع الساعة 8:00 الصبح", "الاجتماع الساعة ثمانية الصبح"),
+)
+
 
 def test_evaluation_numbers_are_spoken_without_digit_readings() -> None:
-    numbers = [
-        item for item in load_corpus().items if item.category is CorpusCategory.NUMBER
-    ]
-
-    assert numbers
-    for item in numbers:
-        assert normalize_for_speech(item.tts_text) == item.expected_transcript
+    for digits, spoken in _NUMBER_PAIRS:
+        assert normalize_for_speech(digits) == spoken
 
 
-def test_other_evaluation_text_is_unchanged() -> None:
-    for item in load_corpus().items:
-        if item.category is CorpusCategory.NUMBER:
-            continue
-        assert normalize_for_speech(item.tts_text) == item.tts_text
+def test_plain_arabic_is_unchanged() -> None:
+    assert normalize_for_speech("السلام عليكم") == "السلام عليكم"
+    assert (
+        normalize_for_speech("أبي أطلب iPhone من التطبيق")
+        == "أبي أطلب iPhone من التطبيق"
+    )
 
 
 def test_eastern_digits_use_the_same_spoken_forms() -> None:

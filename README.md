@@ -36,7 +36,10 @@ Fill in every empty value in `.env`. Do not commit that file.
 | `TTS_VOICE_ID` | Yes | |
 | `STT_MODEL` | No | `nova-3` |
 | `STT_LOCALE` | No | `ar-SA` |
+| `TTS_PROVIDER` | No | `elevenlabs` |
 | `TTS_MODEL` | No | `eleven_flash_v2_5` |
+| `TTS_LOCALE` | No | `ar-SA` |
+| `TTS_TEXT_NORMALIZATION` | No | `off` |
 
 If a required value is missing, startup stops. The error lists the setting names. Secret values are not printed and are not written to logs.
 
@@ -115,11 +118,30 @@ Spoken text goes to ElevenLabs through `livekit-plugins-elevenlabs`. The plugin 
 
 | Setting | Role | Default |
 |---------|------|---------|
-| `TTS_MODEL` | ElevenLabs model | `eleven_flash_v2_5` |
-| `TTS_VOICE_ID` | ElevenLabs voice | Required. Use a voice that speaks Saudi Arabic. |
-| `STT_LOCALE` | Language sent to the model | `ar-SA`, sent as `ar` |
+| `TTS_PROVIDER` | Which speaker builder to use | `elevenlabs` |
+| `TTS_MODEL` | Model name for that provider | `eleven_flash_v2_5` |
+| `TTS_VOICE_ID` | Voice for that provider | Required. Use a voice that speaks Saudi Arabic. |
+| `TTS_LOCALE` | Language sent to the speaker | `ar-SA`, sent as `ar` |
+| `TTS_TEXT_NORMALIZATION` | Provider number normalization | `off` |
 
-Flash v2.5 is the primary model. A job loads `TTS_MODEL` and `TTS_VOICE_ID` when it starts. The voice id is not written in source code.
+The room session only calls `create_tts(settings)`. It does not name the model or the provider. Change `TTS_MODEL` to switch models. The session startup code stays the same.
+
+`TTS_LOCALE` is separate from `STT_LOCALE`. Recognition can stay on `ar-SA` while you try another speaker language.
+
+To compare a future provider:
+
+1. Add a builder next to `_elevenlabs_speaker` in `src/sarjy_agent/tts.py`. It should read `TtsConfig` and the server-side key only.
+2. Set `TTS_PROVIDER` to that builder's name.
+3. Set `TTS_MODEL`, `TTS_VOICE_ID`, and `TTS_LOCALE` for the new provider.
+4. Speak the same evaluation sentences and record the model and voice id, as `reports/tts/comparison.md` does for Flash v2.5 and Multilingual v2.
+
+```bash
+uv run python -m sarjy_agent.eval.tts_bench
+```
+
+That command compares two ElevenLabs models with the configured voice. It does not change which model the room session uses.
+
+Flash v2.5 is the primary model. A job loads these speaker settings when it starts. The voice id is not written in source code.
 
 The same corpus was spoken with Flash v2.5 and Multilingual v2, using voice `pNGUEZc2WLum9bjP611g` for both. The key cannot list the voice library, so no other voice was tested. This is not a claim that the voice is the best Saudi voice. A person did not judge naturalness or accent.
 
@@ -131,10 +153,6 @@ The same corpus was spoken with Flash v2.5 and Multilingual v2, using voice `pNG
 | Mean word error rate | 0.462 | 0.455 |
 
 Nova-3 is a hearing check, not a listener. The word error rates are close. Multilingual v2 was about five times slower to the first audio frame. Flash v2.5 stays the primary model.
-
-```bash
-uv run python -m sarjy_agent.eval.tts_bench
-```
 
 The report is `reports/tts/comparison.md`. Each row records the model and the voice id.
 
@@ -190,40 +208,22 @@ Logs do not include API keys, the service token, full conversations, or raw audi
 
 ## Arabic evaluation set
 
-Fixed Saudi Arabic text for later speech-provider comparisons.
+Each clip is a pair in `src/sarjy_agent/eval/data/`.
 
-| Field | Value |
-|-------|-------|
-| Version | `1.0.0` |
-| Locale | `ar-SA` |
-| File | `src/sarjy_agent/eval/data/ar_sa_v1.json` |
+| File | Role |
+|------|------|
+| `ar-sa-001.wav` | The recording sent to speech recognition. Mono 16-bit PCM. |
+| `ar-sa-001.txt` | One line: the words spoken in that wav. |
 
-The set has 37 authored examples:
+The two files must share the same name. A wav with no txt, or a txt with no wav, stops the load. `load_corpus()` from `sarjy_agent.eval` reads the folder in filename order. The score checks Deepgram against the txt line.
 
-| Group | Count |
-|-------|-------|
-| Greetings | 5 |
-| Questions and instructions | 5 |
-| Names and places | 5 |
-| Phone, price, date, and time | 2 each |
-| Arabic mixed with English words | 5 |
-| Ambiguous meaning or unclear speech | 9 |
-
-Each example has an `expected_transcript` for speech-to-text and a `tts_text` for synthesis. Number examples record both the spoken words and the digit form. `acceptable_transcripts` lists other correct writings of the same utterance.
-
-Use the same version, the same item ids, and the same order for every provider comparison. Load the set with `load_corpus()` from `sarjy_agent.eval`.
-
-This version is text only. Add audio only in a new corpus version, and only when the speaker has given permission.
-
-The speech-recognition report speaks each `tts_text` with ElevenLabs, then sends that audio to Deepgram. It does not save the audio. A hypothesis is accepted when it matches the expected transcript or an accepted writing. The report records accepted items, word error rate, and the wait from the end of the speech to the final transcript.
+The speech-recognition report sends each wav to Deepgram. It does not synthesize a new clip. A hypothesis is accepted when it matches the txt, or another accepted writing when one is stored. The report records accepted items, word error rate, and the wait from the end of the wav to the final transcript.
 
 ```bash
 uv run python -m sarjy_agent.eval.stt_bench
 ```
 
-The ElevenLabs result is `reports/stt/nova-3_ar-SA_eleven_flash_v2_5.md`. The earlier Mac voice result stays in `reports/stt/nova-3_ar-SA.md`. Both use the same corpus fingerprint and the same item ids. A new run names the items that changed.
-
-If the text changes, bump `version` and update the fingerprint checked by the tests.
+The report is written under `reports/stt/`. A later run can be compared only when the wav bytes and the txt lines are the same. Changing a recording or a transcript changes the fingerprint.
 
 ## Checks
 
