@@ -31,7 +31,6 @@ from sarjy_agent.backend import (
     BackendClient,
     BackendError,
     TranscriptStore,
-    agent_memory_facts,
     create_backend,
 )
 from sarjy_agent.config import Settings, load_settings
@@ -237,7 +236,7 @@ async def _load_memory(
             operation="list_memory",
             error_type=exc.error_type,
         )
-        facts = agent_memory_facts(voice.user_id)
+        return ()
     return memory_fact_lines(facts)
 
 

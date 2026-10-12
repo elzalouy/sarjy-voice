@@ -13,7 +13,6 @@ from sarjy_agent.backend import (
     AuthorizedSession,
     BackendClient,
     MemoryFact,
-    clear_agent_memory,
     memory_path,
 )
 from sarjy_agent.config import load_settings
@@ -43,12 +42,35 @@ def test_memory_values_and_locations_are_narrow() -> None:
     assert review_location("https://example.com") is None
 
 
-def test_favorite_color_stays_on_the_agent(valid_env: None) -> None:
+def test_any_fact_except_a_secret_is_sent_to_the_backend(valid_env: None) -> None:
     calls = _Calls()
     user_id = "33333333-3333-4333-8333-333333333333"
+
+    def reply() -> dict[str, object]:
+        body = calls.bodies[-1]
+        if body.get("value") == "أزرق":
+            return {
+                "memory": {
+                    "key": "favorite_color",
+                    "value": "أزرق",
+                    "updatedAt": "2026-10-11T09:00:00.000Z",
+                }
+            }
+        if body.get("key") == "favorite_color":
+            return {"deleted": True}
+        return {
+            "memories": [
+                {
+                    "key": "favorite_color",
+                    "value": "أزرق",
+                    "updatedAt": "2026-10-11T09:00:00.000Z",
+                }
+            ]
+        }
+
     client = BackendClient(
         load_settings(),
-        transport=httpx.MockTransport(calls.respond(lambda: {"memories": []})),
+        transport=httpx.MockTransport(calls.respond(reply)),
         retry_pause_seconds=0,
     )
     tools = {
@@ -67,14 +89,12 @@ def test_favorite_color_stays_on_the_agent(valid_env: None) -> None:
     }
 
     async def scenario() -> tuple[str, tuple[str, ...], str]:
-        clear_agent_memory()
         try:
             saved = await tools["remember_preference"]("favorite_color", " أزرق ")
             listed = await client.list_memory(user_id)
             removed = await tools["forget_preference"]("favorite_color")
             return saved, memory_fact_lines(listed), removed
         finally:
-            clear_agent_memory()
             await client.aclose()
 
     saved, lines, removed = asyncio.run(scenario())
@@ -82,8 +102,9 @@ def test_favorite_color_stays_on_the_agent(valid_env: None) -> None:
     assert saved == "saved favorite_color=أزرق"
     assert lines == ("اللون المفضل: أزرق.",)
     assert removed == "deleted favorite_color"
-    assert calls.paths == [memory_path(user_id)]
-    assert all(item.get("key") != "favorite_color" for item in calls.bodies)
+    assert calls.paths == [memory_path(user_id)] * 3
+    assert calls.bodies[0]["key"] == "favorite_color"
+    assert calls.bodies[0]["value"] == "أزرق"
 
 
 def test_loaded_facts_stay_data() -> None:
